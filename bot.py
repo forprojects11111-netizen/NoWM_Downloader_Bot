@@ -5,7 +5,8 @@ import yt_dlp
 import os
 import re
 
-TOKEN = "8677933663:AAEbp-bnQll9OQ0NRRlR8k0Ts7-NOtW9RHQ"
+TOKEN = "8677933663:AAHPX6Q5QfJMPOrtUKIB_7A4adsBrrF0Rs" 
+
 chanify = Chanify("chanify_live_df1f606b9f906b53f1")
 bot = telebot.TeleBot(TOKEN)
 
