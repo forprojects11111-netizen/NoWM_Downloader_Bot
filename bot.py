@@ -7,7 +7,7 @@ import telebot
 from telebot.types import InlineKeyboardButton, InlineKeyboardMarkup
 import yt_dlp
 
-# --- 1. خادم Flask لتشغيل البوت على Web Service مجاناً في Render ---
+# --- 1. خادم Flask ---
 app = Flask(__name__)
 
 
@@ -23,24 +23,32 @@ def run_server():
 
 Thread(target=run_server, daemon=True).start()
 
-# --- 2. إعدادات بوت التلجرام وشبكة الإعلانات ---
+# --- 2. إعدادات البوت ---
 TOKEN = os.environ.get(
     'TOKEN', '8677933663:AAHPX6Q5QfJMPOrtUKIB_7A4adsBrrF0Rs'
 )
-# مفتاح الناشر الخاص بحسابك في Chanify
 chanify = Chanify('chanify_live_14b40517ace493e224813706526bdb66')
 bot = telebot.TeleBot(TOKEN)
 
 user_urls = {}
 
-# إعدادات yt-dlp للتظاهر بطلب البيانات من تطبيق محمول لتجاوز حظر Render
+# إعدادات متقدمة لتجاوز حظر يوتيوب للـ Datacenters
 BASE_YDL_OPTS = {
     'quiet': True,
     'no_warnings': True,
     'nocheckcertificate': True,
     'geo_bypass': True,
     'extractor_args': {
-        'youtube': {'player_client': ['android', 'ios', 'web_creator']}
+        'youtube': {
+            'player_client': [
+                'android',
+                'ios',
+                'mweb',
+                'web_creator',
+                'android_creator',
+            ],
+            'player_skip': ['configs', 'webpage'],
+        }
     },
 }
 
@@ -84,7 +92,7 @@ def handle_message(message):
 )
 def handle_download_choice(call):
   user_id = call.message.chat.id
-  url = user_urls.pop(user_id, None)  # مسح الرابط من الذاكرة بعد استخراجه
+  url = user_urls.pop(user_id, None)
 
   if not url:
     bot.send_message(
@@ -94,7 +102,6 @@ def handle_download_choice(call):
 
   bot.answer_callback_query(call.id, 'جاري فحص الرابط ومعالجته...')
 
-  # عرض الإعلان واحتساب الربح في Chanify
   try:
     chanify.show_ad(chat_id=user_id)
   except Exception as e:
@@ -114,7 +121,6 @@ def handle_download_choice(call):
       filesize = info.get('filesize') or info.get('filesize_approx') or 0
       filesize_mb = filesize / (1024 * 1024) if filesize else 0
 
-    # التنبيه إذا تجاوز الملف حد 50 ميجابايت المسموح بعه في تلجرام
     if filesize_mb > 50 and not is_tiktok:
       bot.edit_message_text(
           f'⚠️ **حجم الملف كبير ({filesize_mb:.1f} MB)** ويتجاوز حد الـ 50MB'
@@ -168,19 +174,14 @@ def handle_download_choice(call):
                 f,
                 title=title,
                 performer='Smart Downloader',
-                caption=(
-                    f'🎵 **{title}**\n\nاضغط على (⋮) ثم "حفظ في الموسيقى"'
-                    ' لتجده بصيغة MP3 داخل جهازك.'
-                ),
+                caption=f'🎵 **{title}**',
                 parse_mode='Markdown',
             )
           else:
             bot.send_video(
                 user_id,
                 f,
-                caption=(
-                    f'🎥 **{title}**\n\nاضغط على (⋮) ثم "حفظ في المعرض".'
-                ),
+                caption=f'🎥 **{title}**',
                 parse_mode='Markdown',
             )
 
@@ -197,7 +198,6 @@ def handle_download_choice(call):
     )
 
   finally:
-    # التنظيف الحتمي لحذف الملفات الموقتة وتوفير مساحة السيرفر
     if file_path and os.path.exists(file_path):
       try:
         os.remove(file_path)
@@ -206,4 +206,6 @@ def handle_download_choice(call):
 
 
 print('Smart Downloader Bot is running...')
-bot.infinity_polling(timeout=10, long_polling_timeout=5)
+# استخدام drop_pending_updates لإلغاء الجلسات القديمة وحل مشكلة 409
+bot.remove_webhook()
+bot.infinity_polling(timeout=10, long_polling_timeout=5, skip_pending=True)
