@@ -1,8 +1,10 @@
 import os
 import re
+import time
 from threading import Thread
 from chanify import Chanify
 from flask import Flask
+import requests
 import telebot
 from telebot.types import InlineKeyboardButton, InlineKeyboardMarkup
 import yt_dlp
@@ -21,9 +23,23 @@ def run_server():
   app.run(host='0.0.0.0', port=port)
 
 
-Thread(target=run_server, daemon=True).start()
+# --- 2. دالة Self-Ping لضمان بقاء Render نشطاً ---
+def keep_alive_ping():
+  time.sleep(10)  # الانتظار حتى يبدأ السيرفر
+  url = 'https://nowm-downloader-bot-3-syg0.onrender.com'
+  while True:
+    try:
+      requests.get(url, timeout=10)
+      print('Self-ping sent successfully!')
+    except Exception as e:
+      print(f'Self-ping failed: {e}')
+    time.sleep(600)  # إرسال طلب كل 10 دقائق (600 ثانية)
 
-# --- 2. جلب المفاتيح بأمان من Environment Variables ---
+
+Thread(target=run_server, daemon=True).start()
+Thread(target=keep_alive_ping, daemon=True).start()
+
+# --- 3. جلب المفاتيح وبقية الكود ---
 TOKEN = os.environ.get('TOKEN')
 CHANIFY_KEY = os.environ.get('CHANIFY_KEY')
 
@@ -39,13 +55,12 @@ user_urls = {}
 
 COOKIE_FILE = 'cookies.txt'
 
-# إعدادات التخفي وتحديد الصيغ الافتراضية لمنع error Requested format is not available
 BASE_YDL_OPTS = {
     'quiet': True,
     'no_warnings': True,
     'nocheckcertificate': True,
     'geo_bypass': True,
-    'format': 'b/bv*+ba/best',  # اختيار أعم صيغة متاحة لتفادي الفشل أثناء الفحص
+    'format': 'b/bv*+ba/best',
     'extractor_args': {
         'youtube': {
             'player_client': [
@@ -130,7 +145,6 @@ def handle_download_choice(call):
     filesize_mb = 0
     title = 'Media_File'
 
-    # معالجة آمنة لفحص معلومات الفيديو
     with yt_dlp.YoutubeDL(ydl_info_opts) as ydl:
       try:
         info = ydl.extract_info(url, download=False)
