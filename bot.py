@@ -7,7 +7,7 @@ import telebot
 from telebot.types import InlineKeyboardButton, InlineKeyboardMarkup
 import yt_dlp
 
-# --- 1. خادم Flask ---
+# --- 1. خادم Flask للـ Keep-Alive ---
 app = Flask(__name__)
 
 
@@ -23,16 +23,23 @@ def run_server():
 
 Thread(target=run_server, daemon=True).start()
 
-# --- 2. إعدادات البوت ---
-TOKEN = os.environ.get(
-    'TOKEN', '8677933663:AAHPX6Q5QfJMPOrtUKIB_7A4adsBrrF0Rs'
-)
-chanify = Chanify('chanify_live_14b40517ace493e224813706526bdb66')
+# --- 2. جلب المفاتيح بأمان من Environment Variables ---
+TOKEN = os.environ.get('TOKEN')
+CHANIFY_KEY = os.environ.get('CHANIFY_KEY')
+
+if not TOKEN:
+  raise ValueError(
+      '❌ خطأ: لم يتم ضبط متغير البيئة TOKEN في لوحة تحكم Render!'
+  )
+
+chanify = Chanify(CHANIFY_KEY) if CHANIFY_KEY else None
 bot = telebot.TeleBot(TOKEN)
 
 user_urls = {}
 
-# إعدادات متقدمة لتجاوز حظر يوتيوب للـ Datacenters
+COOKIE_FILE = 'cookies.txt'
+
+# إعدادات التخفي وتجاوز قيود يوتيوب
 BASE_YDL_OPTS = {
     'quiet': True,
     'no_warnings': True,
@@ -51,6 +58,9 @@ BASE_YDL_OPTS = {
         }
     },
 }
+
+if os.path.exists(COOKIE_FILE):
+  BASE_YDL_OPTS['cookiefile'] = COOKIE_FILE
 
 
 def clean_filename(title):
@@ -102,10 +112,11 @@ def handle_download_choice(call):
 
   bot.answer_callback_query(call.id, 'جاري فحص الرابط ومعالجته...')
 
-  try:
-    chanify.show_ad(chat_id=user_id)
-  except Exception as e:
-    print(f'Chanify Error: {e}')
+  if chanify:
+    try:
+      chanify.show_ad(chat_id=user_id)
+    except Exception as e:
+      print(f'Chanify Error: {e}')
 
   status_msg = bot.send_message(user_id, '🔍 جاري فحص الملف ومعرفة الحجم...')
 
@@ -131,7 +142,7 @@ def handle_download_choice(call):
       )
     else:
       bot.edit_message_text(
-          '⏳ جاري تحميل وتجهيز الملف بالاسم الأصلي...',
+          '⏳ جاري تحميل وتجهيز الملف...',
           user_id,
           status_msg.message_id,
       )
@@ -139,10 +150,13 @@ def handle_download_choice(call):
       ydl_dl_opts = BASE_YDL_OPTS.copy()
       os.makedirs('downloads', exist_ok=True)
 
+      # استخدام user_id واسم فريد للحد من تداخل الملفات
+      filename_template = f'downloads/{user_id}_%(id)s.%(ext)s'
+
       if is_audio:
         ydl_dl_opts.update({
             'format': 'bestaudio/best',
-            'outtmpl': 'downloads/%(title)s.%(ext)s',
+            'outtmpl': filename_template,
             'postprocessors': [{
                 'key': 'FFmpegExtractAudio',
                 'preferredcodec': 'mp3',
@@ -152,7 +166,7 @@ def handle_download_choice(call):
       else:
         ydl_dl_opts.update({
             'format': 'best[ext=mp4]/best',
-            'outtmpl': 'downloads/%(title)s.%(ext)s',
+            'outtmpl': filename_template,
         })
 
       with yt_dlp.YoutubeDL(ydl_dl_opts) as ydl:
@@ -198,6 +212,7 @@ def handle_download_choice(call):
     )
 
   finally:
+    # ضمان تنظيف القرص دائماً لمنع استهلاك مساحة Render
     if file_path and os.path.exists(file_path):
       try:
         os.remove(file_path)
@@ -206,6 +221,7 @@ def handle_download_choice(call):
 
 
 print('Smart Downloader Bot is running...')
-# استخدام drop_pending_updates لإلغاء الجلسات القديمة وحل مشكلة 409
 bot.remove_webhook()
-bot.infinity_polling(timeout=10, long_polling_timeout=5, skip_pending=True)
+bot.infinity_polling(
+    timeout=20, long_polling_timeout=10, skip_pending=True, restart_on_change=False
+)
