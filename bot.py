@@ -39,7 +39,7 @@ user_urls = {}
 
 COOKIE_FILE = 'cookies.txt'
 
-# إعدادات التخفي وتجاوز قيود يوتيوب
+# إعدادات التخفي وتجاوز قيود منصات الفيديو
 BASE_YDL_OPTS = {
     'quiet': True,
     'no_warnings': True,
@@ -150,12 +150,11 @@ def handle_download_choice(call):
       ydl_dl_opts = BASE_YDL_OPTS.copy()
       os.makedirs('downloads', exist_ok=True)
 
-      # استخدام user_id واسم فريد للحد من تداخل الملفات
       filename_template = f'downloads/{user_id}_%(id)s.%(ext)s'
 
       if is_audio:
         ydl_dl_opts.update({
-            'format': 'bestaudio/best',
+            'format': 'ba/b',
             'outtmpl': filename_template,
             'postprocessors': [{
                 'key': 'FFmpegExtractAudio',
@@ -165,8 +164,11 @@ def handle_download_choice(call):
         })
       else:
         ydl_dl_opts.update({
-            'format': 'best[ext=mp4]/best',
+            'format': (
+                'bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4]/bestvideo+bestaudio/best'
+            ),
             'outtmpl': filename_template,
+            'merge_output_format': 'mp4',
         })
 
       with yt_dlp.YoutubeDL(ydl_dl_opts) as ydl:
@@ -175,6 +177,11 @@ def handle_download_choice(call):
 
         if is_audio:
           file_path = os.path.splitext(file_path)[0] + '.mp3'
+        elif not file_path.endswith('.mp4'):
+          # التأكد من امتداد الملف بعد عملية الدمج
+          base_path = os.path.splitext(file_path)[0]
+          if os.path.exists(base_path + '.mp4'):
+            file_path = base_path + '.mp4'
 
       if file_path and os.path.exists(file_path):
         bot.edit_message_text(
@@ -212,16 +219,20 @@ def handle_download_choice(call):
     )
 
   finally:
-    # ضمان تنظيف القرص دائماً لمنع استهلاك مساحة Render
-    if file_path and os.path.exists(file_path):
-      try:
-        os.remove(file_path)
-      except Exception as clean_err:
-        print(f'Cleanup Error: {clean_err}')
+    if file_path:
+      # حذف الملف الأساسي أو الملف بطلب امتداد mp3/mp4 لتفادي تراكم المساحة
+      base_path = os.path.splitext(file_path)[0]
+      for ext in ['', '.mp3', '.mp4', '.webm', '.m4a']:
+        target_file = (
+            base_path + ext if not file_path.endswith(ext) else file_path
+        )
+        if os.path.exists(target_file):
+          try:
+            os.remove(target_file)
+          except Exception as clean_err:
+            print(f'Cleanup Error: {clean_err}')
 
 
 print('Smart Downloader Bot is running...')
 bot.remove_webhook()
-bot.infinity_polling(
-    timeout=20, long_polling_timeout=10, skip_pending=True, restart_on_change=False
-)
+bot.infinity_polling(timeout=20, long_polling_timeout=10, skip_pending=True)
