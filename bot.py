@@ -29,7 +29,7 @@ TOKEN = os.environ.get(
     "TOKEN", "8677933663:AAHPX6Q5QfJMPOrtUKIB_7A4adsBrrF0Rs"
 )
 
-chanify = Chanify("chanify_live_df1f606b9f906b53f1")
+chanify = Chanify("chanify_live_14b40517ace493e224813706526bdb66")
 bot = telebot.TeleBot(TOKEN)
 
 user_urls = {}
