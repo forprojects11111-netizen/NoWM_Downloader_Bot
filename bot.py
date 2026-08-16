@@ -24,12 +24,10 @@ def run_server():
 Thread(target=run_server, daemon=True).start()
 
 # --- 2. إعدادات بوت التلجرام ---
-# قراءة التوكن من متغيرات البيئة في Render لتجنب تعارض القيم
-TOKEN = os.environ.get("TOKEN")
-
-if not TOKEN:
-  print("❌ Error: TOKEN environment variable is not set in Render!")
-  exit(1)
+# جلب التوكن من Environment Variables مع وضع التوكن الافتراضي لمنع فشل الـ Deploy
+TOKEN = os.environ.get(
+    "TOKEN", "8677933663:AAHPX6Q5QfJMPOrtUKIB_7A4adsBrrF0Rs"
+)
 
 chanify = Chanify("chanify_live_df1f606b9f906b53f1")
 bot = telebot.TeleBot(TOKEN)
