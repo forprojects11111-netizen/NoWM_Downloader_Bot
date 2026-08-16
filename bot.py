@@ -39,12 +39,13 @@ user_urls = {}
 
 COOKIE_FILE = 'cookies.txt'
 
-# إعدادات التخفي وتجاوز قيود منصات الفيديو
+# إعدادات التخفي وتحديد الصيغ الافتراضية لمنع error Requested format is not available
 BASE_YDL_OPTS = {
     'quiet': True,
     'no_warnings': True,
     'nocheckcertificate': True,
     'geo_bypass': True,
+    'format': 'b/bv*+ba/best',  # اختيار أعم صيغة متاحة لتفادي الفشل أثناء الفحص
     'extractor_args': {
         'youtube': {
             'player_client': [
@@ -126,11 +127,18 @@ def handle_download_choice(call):
 
   try:
     ydl_info_opts = BASE_YDL_OPTS.copy()
+    filesize_mb = 0
+    title = 'Media_File'
+
+    # معالجة آمنة لفحص معلومات الفيديو
     with yt_dlp.YoutubeDL(ydl_info_opts) as ydl:
-      info = ydl.extract_info(url, download=False)
-      title = info.get('title', 'Media_File')
-      filesize = info.get('filesize') or info.get('filesize_approx') or 0
-      filesize_mb = filesize / (1024 * 1024) if filesize else 0
+      try:
+        info = ydl.extract_info(url, download=False)
+        title = info.get('title', 'Media_File')
+        filesize = info.get('filesize') or info.get('filesize_approx') or 0
+        filesize_mb = filesize / (1024 * 1024) if filesize else 0
+      except Exception as info_err:
+        print(f'Info Fetch Warning: {info_err}')
 
     if filesize_mb > 50 and not is_tiktok:
       bot.edit_message_text(
@@ -154,7 +162,7 @@ def handle_download_choice(call):
 
       if is_audio:
         ydl_dl_opts.update({
-            'format': 'ba/b',
+            'format': 'ba/b/best',
             'outtmpl': filename_template,
             'postprocessors': [{
                 'key': 'FFmpegExtractAudio',
@@ -178,7 +186,6 @@ def handle_download_choice(call):
         if is_audio:
           file_path = os.path.splitext(file_path)[0] + '.mp3'
         elif not file_path.endswith('.mp4'):
-          # التأكد من امتداد الملف بعد عملية الدمج
           base_path = os.path.splitext(file_path)[0]
           if os.path.exists(base_path + '.mp4'):
             file_path = base_path + '.mp4'
@@ -220,7 +227,6 @@ def handle_download_choice(call):
 
   finally:
     if file_path:
-      # حذف الملف الأساسي أو الملف بطلب امتداد mp3/mp4 لتفادي تراكم المساحة
       base_path = os.path.splitext(file_path)[0]
       for ext in ['', '.mp3', '.mp4', '.webm', '.m4a']:
         target_file = (
