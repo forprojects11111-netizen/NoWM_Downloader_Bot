@@ -167,7 +167,7 @@ def handle_download_choice(call):
 
       if is_audio:
         ydl_dl_opts.update({
-            'format': 'bestaudio/best',
+            'format': 'ba/b',
             'outtmpl': filename_template,
             'postprocessors': [{
                 'key': 'FFmpegExtractAudio',
@@ -177,7 +177,7 @@ def handle_download_choice(call):
         })
       else:
         ydl_dl_opts.update({
-            'format': 'b/bestvideo+bestaudio/best',
+            'format': 'bv*+ba/b',
             'outtmpl': filename_template,
             'merge_output_format': 'mp4',
         })
