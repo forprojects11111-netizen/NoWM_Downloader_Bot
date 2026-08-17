@@ -54,13 +54,12 @@ bot = telebot.TeleBot(TOKEN)
 user_urls = {}
 COOKIE_FILE = 'cookies.txt'
 
-# إعدادات متساهلة لضمان جلب المعلومات دون اشتراط صيغة محددة
-BASE_YDL_OPTS = {
+# الإعدادات العامة لشبكة وتخطي الحجب
+COMMON_OPTS = {
     'quiet': True,
     'no_warnings': True,
     'nocheckcertificate': True,
     'geo_bypass': True,
-    'format': 'best',
     'extractor_args': {
         'youtube': {
             'player_client': [
@@ -76,7 +75,7 @@ BASE_YDL_OPTS = {
 }
 
 if os.path.exists(COOKIE_FILE):
-  BASE_YDL_OPTS['cookiefile'] = COOKIE_FILE
+  COMMON_OPTS['cookiefile'] = COOKIE_FILE
 
 
 def clean_filename(title):
@@ -141,7 +140,8 @@ def handle_download_choice(call):
   file_path = None
 
   try:
-    ydl_info_opts = BASE_YDL_OPTS.copy()
+    # 1. إعدادات الفحص فقط (تجنب وضع قيود على format هنا)
+    ydl_info_opts = COMMON_OPTS.copy()
     filesize_mb = 0
     title = 'Media_File'
 
@@ -169,9 +169,9 @@ def handle_download_choice(call):
           status_msg.message_id,
       )
 
-      ydl_dl_opts = BASE_YDL_OPTS.copy()
+      # 2. إعدادات التنزيل المخصصة لكل نوع
+      ydl_dl_opts = COMMON_OPTS.copy()
       os.makedirs('downloads', exist_ok=True)
-
       filename_template = f'downloads/{user_id}_%(id)s.%(ext)s'
 
       if is_audio:
@@ -185,8 +185,11 @@ def handle_download_choice(call):
             }],
         })
       else:
+        # المرونة التامة: استخدام أفضل فيديو وأفضل صوت مع صيغة MP4 مرنة
         ydl_dl_opts.update({
-            'format': 'bestvideo+bestaudio/best',
+            'format': (
+                'bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio/best'
+            ),
             'outtmpl': filename_template,
             'merge_output_format': 'mp4',
         })
