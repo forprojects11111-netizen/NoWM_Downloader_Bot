@@ -54,7 +54,7 @@ bot = telebot.TeleBot(TOKEN)
 user_urls = {}
 COOKIE_FILE = 'cookies.txt'
 
-# الإعدادات العامة لشبكة وتخطي الحجب
+# إعدادات عامة مرنة بدون تقييد جلب الصيغ من يوتيوب
 COMMON_OPTS = {
     'quiet': True,
     'no_warnings': True,
@@ -62,14 +62,7 @@ COMMON_OPTS = {
     'geo_bypass': True,
     'extractor_args': {
         'youtube': {
-            'player_client': [
-                'android',
-                'ios',
-                'mweb',
-                'web_creator',
-                'android_creator',
-            ],
-            'player_skip': ['configs', 'webpage'],
+            'player_client': ['android', 'ios', 'mweb'],
         }
     },
 }
@@ -140,7 +133,7 @@ def handle_download_choice(call):
   file_path = None
 
   try:
-    # 1. إعدادات الفحص فقط (تجنب وضع قيود على format هنا)
+    # 1. جلب معلومات الرابط
     ydl_info_opts = COMMON_OPTS.copy()
     filesize_mb = 0
     title = 'Media_File'
@@ -169,7 +162,7 @@ def handle_download_choice(call):
           status_msg.message_id,
       )
 
-      # 2. إعدادات التنزيل المخصصة لكل نوع
+      # 2. إعدادات التنزيل مع صيغ احتياطية مرنة (Fallback)
       ydl_dl_opts = COMMON_OPTS.copy()
       os.makedirs('downloads', exist_ok=True)
       filename_template = f'downloads/{user_id}_%(id)s.%(ext)s'
@@ -185,11 +178,9 @@ def handle_download_choice(call):
             }],
         })
       else:
-        # المرونة التامة: استخدام أفضل فيديو وأفضل صوت مع صيغة MP4 مرنة
+        # صيغة مرنة تبدأ بالأفضل وتنتقل لتجميع أوتوماتيكي بدون فرض قيود ملحقات
         ydl_dl_opts.update({
-            'format': (
-                'bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio/best'
-            ),
+            'format': 'bestvideo+bestaudio/best',
             'outtmpl': filename_template,
             'merge_output_format': 'mp4',
         })
@@ -255,7 +246,7 @@ def handle_download_choice(call):
             print(f'Cleanup Error: {clean_err}')
 
 
-# --- 4. تشغيل البوت وحمايته من خطأ التعارض (409 Conflict) ---
+# --- 4. تشغيل البوت ---
 print('Smart Downloader Bot is running...')
 
 try:
@@ -265,7 +256,9 @@ except Exception as e:
 
 while True:
   try:
-    bot.infinity_polling(timeout=20, long_polling_timeout=10, skip_pending=True)
+    bot.infinity_polling(
+        timeout=20, long_polling_timeout=10, skip_pending=True
+    )
   except Exception as e:
     print(f'Polling Exception Handled: {e}')
     time.sleep(5)
