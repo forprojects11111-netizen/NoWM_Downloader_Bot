@@ -39,7 +39,7 @@ def keep_alive_ping():
 Thread(target=run_server, daemon=True).start()
 Thread(target=keep_alive_ping, daemon=True).start()
 
-# --- 3. جلب المفاتيح وبقية الكود ---
+# --- 3. جلب المفاتيح وإعداد البوت ---
 TOKEN = os.environ.get('TOKEN')
 CHANIFY_KEY = os.environ.get('CHANIFY_KEY')
 
@@ -60,7 +60,7 @@ BASE_YDL_OPTS = {
     'no_warnings': True,
     'nocheckcertificate': True,
     'geo_bypass': True,
-    'format': 'best',  # اختيار أسهل صيغة متوفرة عند الفحص لتفادي الخطأ
+    'format': 'best',
     'extractor_args': {
         'youtube': {
             'player_client': [
@@ -176,7 +176,7 @@ def handle_download_choice(call):
 
       if is_audio:
         ydl_dl_opts.update({
-            'format': 'bestaudio/best',  # خيارات مرنة للصوت
+            'format': 'bestaudio/best',
             'outtmpl': filename_template,
             'postprocessors': [{
                 'key': 'FFmpegExtractAudio',
@@ -185,7 +185,6 @@ def handle_download_choice(call):
             }],
         })
       else:
-        # صيغة شاملة تناسب جميع جودات يوتيوب وتيك توك دون تقييد الامتداد
         ydl_dl_opts.update({
             'format': 'bestvideo+bestaudio/best',
             'outtmpl': filename_template,
@@ -253,6 +252,17 @@ def handle_download_choice(call):
             print(f'Cleanup Error: {clean_err}')
 
 
+# --- 4. تشغيل البوت وحمايته من خطأ التعارض (409 Conflict) ---
 print('Smart Downloader Bot is running...')
-bot.remove_webhook()
-bot.infinity_polling(timeout=20, long_polling_timeout=10, skip_pending=True)
+
+try:
+  bot.remove_webhook()
+except Exception as e:
+  print(f'Webhook Removal Warning: {e}')
+
+while True:
+  try:
+    bot.infinity_polling(timeout=20, long_polling_timeout=10, skip_pending=True)
+  except Exception as e:
+    print(f'Polling Exception Handled: {e}')
+    time.sleep(5)
