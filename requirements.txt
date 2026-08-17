@@ -3,3 +3,5 @@ yt-dlp>=2024.08.01
 chanify
 Flask
 gunicorn
+requests
+static-ffmpeg
