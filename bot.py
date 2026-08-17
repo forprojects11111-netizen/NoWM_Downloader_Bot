@@ -10,7 +10,7 @@ import telebot
 from telebot.types import InlineKeyboardButton, InlineKeyboardMarkup
 import yt_dlp
 
-# --- 0. تثبيت وتفعيل FFmpeg في البيئة تلقائياً ---
+# --- 0. تثبيت وتفعيل FFmpeg ---
 try:
   static_ffmpeg.add_paths()
 except Exception as e:
@@ -30,7 +30,7 @@ def run_server():
   app.run(host='0.0.0.0', port=port)
 
 
-# --- 2. Self-Ping لضمان بقاء Render نشطاً ---
+# --- 2. Self-Ping ---
 def keep_alive_ping():
   time.sleep(10)
   url = 'https://nowm-downloader-bot-3-syg0.onrender.com'
@@ -66,11 +66,6 @@ COMMON_OPTS = {
     'no_warnings': True,
     'nocheckcertificate': True,
     'geo_bypass': True,
-    'extractor_args': {
-        'youtube': {
-            'player_client': ['android', 'ios', 'web'],
-        }
-    },
 }
 
 if os.path.exists(COOKIE_FILE):
@@ -165,9 +160,10 @@ def handle_download_choice(call):
       os.makedirs('downloads', exist_ok=True)
       filename_template = f'downloads/{user_id}_%(id)s.%(ext)s'
 
+      # صيغة شاملة ومرنة لتجنب Requested format is not available
       if is_audio:
         ydl_dl_opts.update({
-            'format': 'ba/b',
+            'format': 'bestaudio/best',
             'outtmpl': filename_template,
             'postprocessors': [{
                 'key': 'FFmpegExtractAudio',
@@ -177,9 +173,8 @@ def handle_download_choice(call):
         })
       else:
         ydl_dl_opts.update({
-            'format': 'bv*+ba/b',
+            'format': 'best',  # يجلب أفضل ملف جاهز يحتوي صوت وفيديو مباشرة
             'outtmpl': filename_template,
-            'merge_output_format': 'mp4',
         })
 
       with yt_dlp.YoutubeDL(ydl_dl_opts) as ydl:
