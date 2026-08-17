@@ -5,9 +5,16 @@ from threading import Thread
 from chanify import Chanify
 from flask import Flask
 import requests
+import static_ffmpeg
 import telebot
 from telebot.types import InlineKeyboardButton, InlineKeyboardMarkup
 import yt_dlp
+
+# --- 0. تثبيت وتفعيل FFmpeg في البيئة تلقائياً ---
+try:
+  static_ffmpeg.add_paths()
+except Exception as e:
+  print(f'FFmpeg setup warning: {e}')
 
 # --- 1. خادم Flask للـ Keep-Alive ---
 app = Flask(__name__)
@@ -54,13 +61,16 @@ bot = telebot.TeleBot(TOKEN)
 user_urls = {}
 COOKIE_FILE = 'cookies.txt'
 
-# إعدادات عامة مرنة
 COMMON_OPTS = {
     'quiet': True,
     'no_warnings': True,
     'nocheckcertificate': True,
     'geo_bypass': True,
-    'extractor_args': {'youtube': {'player_client': ['ios', 'android', 'mweb']}},
+    'extractor_args': {
+        'youtube': {
+            'player_client': ['android', 'ios', 'web'],
+        }
+    },
 }
 
 if os.path.exists(COOKIE_FILE):
@@ -125,7 +135,6 @@ def handle_download_choice(call):
   file_path = None
 
   try:
-    # 1. جلب معلومات الرابط
     ydl_info_opts = COMMON_OPTS.copy()
     filesize_mb = 0
     title = 'Media_File'
@@ -142,7 +151,7 @@ def handle_download_choice(call):
     if filesize_mb > 50 and not is_tiktok:
       bot.edit_message_text(
           f'⚠️ **حجم الملف كبير ({filesize_mb:.1f} MB)** ويتجاوز حد الـ 50MB'
-          ' المسموح به داخل تلجرام.',
+          ' المسموح به للرفع المباشر داخل تلجرام.',
           user_id,
           status_msg.message_id,
           parse_mode='Markdown',
@@ -152,7 +161,6 @@ def handle_download_choice(call):
           '⏳ جاري تحميل وتجهيز الملف...', user_id, status_msg.message_id
       )
 
-      # 2. خيارات التنزيل المرنة (تعتمد الصيغ الجاهزة أولاً لضمان العمل بدون FFmpeg)
       ydl_dl_opts = COMMON_OPTS.copy()
       os.makedirs('downloads', exist_ok=True)
       filename_template = f'downloads/{user_id}_%(id)s.%(ext)s'
@@ -161,19 +169,27 @@ def handle_download_choice(call):
         ydl_dl_opts.update({
             'format': 'bestaudio/best',
             'outtmpl': filename_template,
+            'postprocessors': [{
+                'key': 'FFmpegExtractAudio',
+                'preferredcodec': 'mp3',
+                'preferredquality': '192',
+            }],
         })
       else:
-        # صيغة مرنة تبدأ بالصيغة المدمجة المباشرة لتجنب الحاجة للدمج
         ydl_dl_opts.update({
-            'format': (
-                'best[ext=mp4]/bestvideo[ext=mp4]+bestaudio[ext=m4a]/best'
-            ),
+            'format': 'b/bestvideo+bestaudio/best',
             'outtmpl': filename_template,
+            'merge_output_format': 'mp4',
         })
 
       with yt_dlp.YoutubeDL(ydl_dl_opts) as ydl:
         download_info = ydl.extract_info(url, download=True)
         file_path = ydl.prepare_filename(download_info)
+
+        if is_audio:
+          base_path = os.path.splitext(file_path)[0]
+          if os.path.exists(base_path + '.mp3'):
+            file_path = base_path + '.mp3'
 
       if file_path and os.path.exists(file_path):
         bot.edit_message_text(
@@ -218,7 +234,7 @@ def handle_download_choice(call):
         print(f'Cleanup Error: {clean_err}')
 
 
-# --- 4. تشغيل البوت مع تجاوز خطأ 409 التلقائي ---
+# --- 4. تشغيل البوت ---
 print('Smart Downloader Bot is running...')
 
 try:
@@ -233,4 +249,4 @@ while True:
     )
   except Exception as e:
     print(f'Polling Exception Handled: {e}')
-    time.sleep(7)
+    time.sleep(5)
