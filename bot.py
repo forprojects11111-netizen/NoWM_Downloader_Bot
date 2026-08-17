@@ -39,7 +39,7 @@ def keep_alive_ping():
 Thread(target=run_server, daemon=True).start()
 Thread(target=keep_alive_ping, daemon=True).start()
 
-# --- 3. جلب المفاتيح وإعداد البوت ---
+# --- 3. إعداد البوت والمفاتيح ---
 TOKEN = os.environ.get('TOKEN')
 CHANIFY_KEY = os.environ.get('CHANIFY_KEY')
 
@@ -54,25 +54,17 @@ bot = telebot.TeleBot(TOKEN)
 user_urls = {}
 COOKIE_FILE = 'cookies.txt'
 
-# إعدادات عامة مرنة بدون تقييد جلب الصيغ من يوتيوب
+# إعدادات عامة مرنة
 COMMON_OPTS = {
     'quiet': True,
     'no_warnings': True,
     'nocheckcertificate': True,
     'geo_bypass': True,
-    'extractor_args': {
-        'youtube': {
-            'player_client': ['android', 'ios', 'mweb'],
-        }
-    },
+    'extractor_args': {'youtube': {'player_client': ['ios', 'android', 'mweb']}},
 }
 
 if os.path.exists(COOKIE_FILE):
   COMMON_OPTS['cookiefile'] = COOKIE_FILE
-
-
-def clean_filename(title):
-  return re.sub(r'[\\/*?:"<>|]', '', title)
 
 
 @bot.message_handler(commands=['start'])
@@ -150,19 +142,17 @@ def handle_download_choice(call):
     if filesize_mb > 50 and not is_tiktok:
       bot.edit_message_text(
           f'⚠️ **حجم الملف كبير ({filesize_mb:.1f} MB)** ويتجاوز حد الـ 50MB'
-          ' المسموح به للرفع المباشر داخل تلجرام.',
+          ' المسموح به داخل تلجرام.',
           user_id,
           status_msg.message_id,
           parse_mode='Markdown',
       )
     else:
       bot.edit_message_text(
-          '⏳ جاري تحميل وتجهيز الملف...',
-          user_id,
-          status_msg.message_id,
+          '⏳ جاري تحميل وتجهيز الملف...', user_id, status_msg.message_id
       )
 
-      # 2. إعدادات التنزيل مع صيغ احتياطية مرنة (Fallback)
+      # 2. خيارات التنزيل المرنة (تعتمد الصيغ الجاهزة أولاً لضمان العمل بدون FFmpeg)
       ydl_dl_opts = COMMON_OPTS.copy()
       os.makedirs('downloads', exist_ok=True)
       filename_template = f'downloads/{user_id}_%(id)s.%(ext)s'
@@ -171,31 +161,19 @@ def handle_download_choice(call):
         ydl_dl_opts.update({
             'format': 'bestaudio/best',
             'outtmpl': filename_template,
-            'postprocessors': [{
-                'key': 'FFmpegExtractAudio',
-                'preferredcodec': 'mp3',
-                'preferredquality': '192',
-            }],
         })
       else:
-        # صيغة مرنة تبدأ بالأفضل وتنتقل لتجميع أوتوماتيكي بدون فرض قيود ملحقات
+        # صيغة مرنة تبدأ بالصيغة المدمجة المباشرة لتجنب الحاجة للدمج
         ydl_dl_opts.update({
-            'format': 'bestvideo+bestaudio/best',
+            'format': (
+                'best[ext=mp4]/bestvideo[ext=mp4]+bestaudio[ext=m4a]/best'
+            ),
             'outtmpl': filename_template,
-            'merge_output_format': 'mp4',
         })
 
       with yt_dlp.YoutubeDL(ydl_dl_opts) as ydl:
         download_info = ydl.extract_info(url, download=True)
         file_path = ydl.prepare_filename(download_info)
-
-        if is_audio:
-          base_path = os.path.splitext(file_path)[0]
-          file_path = base_path + '.mp3'
-        elif not file_path.endswith('.mp4'):
-          base_path = os.path.splitext(file_path)[0]
-          if os.path.exists(base_path + '.mp4'):
-            file_path = base_path + '.mp4'
 
       if file_path and os.path.exists(file_path):
         bot.edit_message_text(
@@ -233,20 +211,14 @@ def handle_download_choice(call):
     )
 
   finally:
-    if file_path:
-      base_path = os.path.splitext(file_path)[0]
-      for ext in ['', '.mp3', '.mp4', '.webm', '.m4a', '.mkv']:
-        target_file = (
-            base_path + ext if not file_path.endswith(ext) else file_path
-        )
-        if os.path.exists(target_file):
-          try:
-            os.remove(target_file)
-          except Exception as clean_err:
-            print(f'Cleanup Error: {clean_err}')
+    if file_path and os.path.exists(file_path):
+      try:
+        os.remove(file_path)
+      except Exception as clean_err:
+        print(f'Cleanup Error: {clean_err}')
 
 
-# --- 4. تشغيل البوت ---
+# --- 4. تشغيل البوت مع تجاوز خطأ 409 التلقائي ---
 print('Smart Downloader Bot is running...')
 
 try:
@@ -261,4 +233,4 @@ while True:
     )
   except Exception as e:
     print(f'Polling Exception Handled: {e}')
-    time.sleep(5)
+    time.sleep(7)
