@@ -23,9 +23,9 @@ def run_server():
   app.run(host='0.0.0.0', port=port)
 
 
-# --- 2. دالة Self-Ping لضمان بقاء Render نشطاً ---
+# --- 2. Self-Ping لضمان بقاء Render نشطاً ---
 def keep_alive_ping():
-  time.sleep(10)  # الانتظار حتى يبدأ السيرفر
+  time.sleep(10)
   url = 'https://nowm-downloader-bot-3-syg0.onrender.com'
   while True:
     try:
@@ -33,7 +33,7 @@ def keep_alive_ping():
       print('Self-ping sent successfully!')
     except Exception as e:
       print(f'Self-ping failed: {e}')
-    time.sleep(600)  # إرسال طلب كل 10 دقائق (600 ثانية)
+    time.sleep(600)
 
 
 Thread(target=run_server, daemon=True).start()
@@ -52,15 +52,15 @@ chanify = Chanify(CHANIFY_KEY) if CHANIFY_KEY else None
 bot = telebot.TeleBot(TOKEN)
 
 user_urls = {}
-
 COOKIE_FILE = 'cookies.txt'
 
+# إعدادات متساهلة لضمان جلب المعلومات دون اشتراط صيغة محددة
 BASE_YDL_OPTS = {
     'quiet': True,
     'no_warnings': True,
     'nocheckcertificate': True,
     'geo_bypass': True,
-    'format': 'b/bv*+ba/best',
+    'format': 'best',  # اختيار أسهل صيغة متوفرة عند الفحص لتفادي الخطأ
     'extractor_args': {
         'youtube': {
             'player_client': [
@@ -176,7 +176,7 @@ def handle_download_choice(call):
 
       if is_audio:
         ydl_dl_opts.update({
-            'format': 'ba/b/best',
+            'format': 'bestaudio/best',  # خيارات مرنة للصوت
             'outtmpl': filename_template,
             'postprocessors': [{
                 'key': 'FFmpegExtractAudio',
@@ -185,10 +185,9 @@ def handle_download_choice(call):
             }],
         })
       else:
+        # صيغة شاملة تناسب جميع جودات يوتيوب وتيك توك دون تقييد الامتداد
         ydl_dl_opts.update({
-            'format': (
-                'bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4]/bestvideo+bestaudio/best'
-            ),
+            'format': 'bestvideo+bestaudio/best',
             'outtmpl': filename_template,
             'merge_output_format': 'mp4',
         })
@@ -198,7 +197,8 @@ def handle_download_choice(call):
         file_path = ydl.prepare_filename(download_info)
 
         if is_audio:
-          file_path = os.path.splitext(file_path)[0] + '.mp3'
+          base_path = os.path.splitext(file_path)[0]
+          file_path = base_path + '.mp3'
         elif not file_path.endswith('.mp4'):
           base_path = os.path.splitext(file_path)[0]
           if os.path.exists(base_path + '.mp4'):
@@ -242,7 +242,7 @@ def handle_download_choice(call):
   finally:
     if file_path:
       base_path = os.path.splitext(file_path)[0]
-      for ext in ['', '.mp3', '.mp4', '.webm', '.m4a']:
+      for ext in ['', '.mp3', '.mp4', '.webm', '.m4a', '.mkv']:
         target_file = (
             base_path + ext if not file_path.endswith(ext) else file_path
         )
