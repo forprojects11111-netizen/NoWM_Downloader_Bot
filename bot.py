@@ -28,17 +28,21 @@ chanify = Chanify(CHANIFY_KEY) if CHANIFY_KEY else None
 user_urls = {}
 COOKIE_FILE = 'cookies.txt'
 
-# --- 3. إعدادات yt-dlp المرنة للغاية لمنع حظر Render ---
+# --- 3. إعدادات yt-dlp المعالجة لحظر خوادم السحاب ---
 BASE_YTDL_OPTS = {
     'quiet': True,
     'no_warnings': True,
     'nocheckcertificate': True,
     'geo_bypass': True,
     'ignoreerrors': True,
-    # اختيار الصيغ الأكثر توافقاً بالترتيب دون إجبار السيرفر على خيار محدد
-    'format': 'best/bestvideo+bestaudio/b',
+    # استخدام 'b' يبحث عن الملف المدمج الجاهز فوراً ويمنع خطأ Requested format
+    'format': 'b/best/b*',
+    'user_agent': (
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML,'
+        ' like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    ),
     'extractor_args': {
-        'youtube': {'player_client': ['android', 'ios', 'web', 'mweb']}
+        'youtube': {'player_client': ['android', 'ios', 'mweb']}
     },
 }
 
@@ -131,7 +135,7 @@ def handle_download_choice(call):
 
     if is_audio:
       ydl_dl_opts.update({
-          'format': 'bestaudio/best',
+          'format': 'ba/b',
           'postprocessors': [{
               'key': 'FFmpegExtractAudio',
               'preferredcodec': 'mp3',
@@ -140,7 +144,6 @@ def handle_download_choice(call):
       })
 
     with yt_dlp.YoutubeDL(ydl_dl_opts) as ydl:
-      # استخراج وتنزيل مباشر
       info_dict = ydl.extract_info(url, download=True)
 
       if info_dict:
@@ -199,7 +202,7 @@ def handle_download_choice(call):
         print(f'Cleanup Error: {clean_err}')
 
 
-# --- 6. تشغيل الـ Webhook والسيرفر ---
+# --- 6. تشغيل הـ Webhook والسيرفر ---
 if __name__ == '__main__':
   webhook_url = f'{RENDER_EXTERNAL_URL}/{TOKEN}'
   bot.remove_webhook()
