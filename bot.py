@@ -61,15 +61,20 @@ bot = telebot.TeleBot(TOKEN)
 user_urls = {}
 COOKIE_FILE = 'cookies.txt'
 
-# إعدادات الحزمة وتحديد المشغلات لتجاوز حظر الصيغ
+# إعدادات متقدمة لتجاوز حظر Render IP
 COMMON_OPTS = {
     'quiet': True,
     'no_warnings': True,
     'nocheckcertificate': True,
     'geo_bypass': True,
+    'user_agent': (
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML,'
+        ' like Gecko) Chrome/125.0.0.0 Safari/537.36'
+    ),
     'extractor_args': {
         'youtube': {
-            'player_client': ['ios', 'mweb'],
+            'player_client': ['web', 'mweb', 'ios'],
+            'skip': ['hls', 'dash'],
         }
     },
 }
@@ -137,7 +142,7 @@ def handle_download_choice(call):
 
   try:
     ydl_info_opts = COMMON_OPTS.copy()
-    ydl_info_opts['format'] = 'best'
+    ydl_info_opts['format'] = 'b/worst'  # أبسط صيغة متوفرة لمنع خطأ Format
     filesize_mb = 0
     title = 'Media_File'
 
@@ -169,7 +174,7 @@ def handle_download_choice(call):
 
       if is_audio:
         ydl_dl_opts.update({
-            'format': 'bestaudio/best',
+            'format': 'ba/b/best',
             'outtmpl': filename_template,
             'postprocessors': [{
                 'key': 'FFmpegExtractAudio',
@@ -178,10 +183,10 @@ def handle_download_choice(call):
             }],
         })
       else:
-        # استخدام مرونة عالية لتجنب خطأ Requested format is not available
+        # صيغ يوتيوب الجاهزة المدمجة لتفادي مشاكل التفاوض
         ydl_dl_opts.update({
             'format': (
-                'bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio/best'
+                'best[ext=mp4]/bestvideo+bestaudio/b[ext=mp4]/best/worst'
             ),
             'outtmpl': filename_template,
             'merge_output_format': 'mp4',
