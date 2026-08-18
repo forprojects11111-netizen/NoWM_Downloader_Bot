@@ -28,23 +28,22 @@ chanify = Chanify(CHANIFY_KEY) if CHANIFY_KEY else None
 user_urls = {}
 COOKIE_FILE = 'cookies.txt'
 
-# --- 3. إعدادات yt-dlp المرنة الشاملة لتجاوز الحظر ---
+# --- 3. إعدادات yt-dlp الشاملة المحدثة لتجاوز الحظر وتغيير الصيغ ---
 BASE_YTDL_OPTS = {
     'quiet': True,
     'no_warnings': True,
     'nocheckcertificate': True,
     'geo_bypass': True,
-    'ignoreerrors': True,
-    # اختيار أفضل جودة متاحة سواء مدمجة أو منفصلة مع بدائل مرنة
-    'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
+    'ignoreerrors': False,
+    # صيغة شمولية تضمن جلب أي جودة وفيديو متاح بدون قيود MP4 صلبة
+    'format': 'b/bv*+ba/best',
     'user_agent': (
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML,'
-        ' like Gecko) Chrome/122.0.0.0 Safari/537.36'
+        ' like Gecko) Chrome/124.0.0.0 Safari/537.36'
     ),
     'extractor_args': {
         'youtube': {
-            'player_client': ['ios', 'android', 'mweb', 'tv_embedded'],
-            'skip': ['hls', 'dash'],
+            'player_client': ['android', 'ios', 'web'],
         }
     },
 }
@@ -76,7 +75,7 @@ def webhook():
 def send_welcome(message):
   bot.reply_to(
       message,
-      'مرحباً بك! أرسل رابط فيديو من يوتيوب أو تيك توك لتنزيله كـ فيديو MP4 أو'
+      'مرحباً بك! أرسل رابط فيديو من يوتيوب أو تيك توك لتنزيله كـ فيديو أو'
       ' صوت MP3.',
   )
 
