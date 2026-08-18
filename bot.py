@@ -61,7 +61,7 @@ bot = telebot.TeleBot(TOKEN)
 user_urls = {}
 COOKIE_FILE = 'cookies.txt'
 
-# إعدادات متوافقة لتجاوز حظر YouTube BOT
+# إعدادات الحزمة وتحديد المشغلات لتجاوز حظر الصيغ
 COMMON_OPTS = {
     'quiet': True,
     'no_warnings': True,
@@ -69,7 +69,7 @@ COMMON_OPTS = {
     'geo_bypass': True,
     'extractor_args': {
         'youtube': {
-            'player_client': ['android'],
+            'player_client': ['ios', 'mweb'],
         }
     },
 }
@@ -137,6 +137,7 @@ def handle_download_choice(call):
 
   try:
     ydl_info_opts = COMMON_OPTS.copy()
+    ydl_info_opts['format'] = 'best'
     filesize_mb = 0
     title = 'Media_File'
 
@@ -168,7 +169,7 @@ def handle_download_choice(call):
 
       if is_audio:
         ydl_dl_opts.update({
-            'format': 'ba/b',
+            'format': 'bestaudio/best',
             'outtmpl': filename_template,
             'postprocessors': [{
                 'key': 'FFmpegExtractAudio',
@@ -177,8 +178,11 @@ def handle_download_choice(call):
             }],
         })
       else:
+        # استخدام مرونة عالية لتجنب خطأ Requested format is not available
         ydl_dl_opts.update({
-            'format': 'bv*+ba/b',
+            'format': (
+                'bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio/best'
+            ),
             'outtmpl': filename_template,
             'merge_output_format': 'mp4',
         })
