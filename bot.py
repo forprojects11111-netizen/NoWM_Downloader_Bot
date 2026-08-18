@@ -28,22 +28,22 @@ chanify = Chanify(CHANIFY_KEY) if CHANIFY_KEY else None
 user_urls = {}
 COOKIE_FILE = 'cookies.txt'
 
-# --- 3. إعدادات yt-dlp الشاملة المحدثة لتجاوز الحظر وتغيير الصيغ ---
+# --- 3. إعدادات yt-dlp المتوافقة مع YouTube Shorts والمقاطع المقيدة ---
 BASE_YTDL_OPTS = {
     'quiet': True,
     'no_warnings': True,
     'nocheckcertificate': True,
     'geo_bypass': True,
     'ignoreerrors': False,
-    # صيغة شمولية تضمن جلب أي جودة وفيديو متاح بدون قيود MP4 صلبة
-    'format': 'b/bv*+ba/best',
+    # اختيار الجودة الأفضل أو أي فيديو/صوت متاح بدون اشتراط صيغة معينة
+    'format': 'best',
     'user_agent': (
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML,'
-        ' like Gecko) Chrome/124.0.0.0 Safari/537.36'
+        ' like Gecko) Chrome/125.0.0.0 Safari/537.36'
     ),
     'extractor_args': {
         'youtube': {
-            'player_client': ['android', 'ios', 'web'],
+            'player_client': ['android', 'web'],
         }
     },
 }
