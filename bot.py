@@ -1,11 +1,10 @@
 import asyncio
-import os
-import time
-from chanify import Chanify
 from flask import Flask, request
+import os
 import static_ffmpeg
 import telebot
 from telebot.types import InlineKeyboardButton, InlineKeyboardMarkup, Update
+import time
 import yt_dlp
 
 # --- 1. إعداد FFmpeg ---
@@ -16,7 +15,8 @@ except Exception as e:
 
 # --- 2. إعداد المتغيرات ---
 TOKEN = os.environ.get('TOKEN')
-CHANIFY_KEY = os.environ.get('CHANIFY_KEY')
+# قراءة رابط Adsterra المباشر من متغير البيئة
+AD_DIRECT_LINK = os.environ.get('AD_DIRECT_LINK', '')
 RENDER_EXTERNAL_URL = os.environ.get(
     'RENDER_EXTERNAL_URL', 'https://nowm-downloader-bot-3-syg0.onrender.com'
 )
@@ -25,18 +25,16 @@ if not TOKEN:
   raise ValueError('❌ لم يتم العثور على TOKEN!')
 
 bot = telebot.TeleBot(TOKEN)
-chanify = Chanify(CHANIFY_KEY) if CHANIFY_KEY else None
 user_urls = {}
 COOKIE_FILE = 'cookies.txt'
 
-# --- 3. إعدادات yt-dlp لتجاوز حظر السيرفرات (Render/Datacenter IPs) ---
+# --- 3. إعدادات yt-dlp لتجاوز حظر السيرفرات ---
 BASE_YTDL_OPTS = {
     'quiet': True,
     'no_warnings': True,
     'nocheckcertificate': True,
     'geo_bypass': True,
     'ignoreerrors': False,
-    # اختيار أكثر صيغة مرونة مدمجة لتجنب طلب جودات منفصلة محظورة
     'format': 'b/best/bv*+ba',
     'format_sort': ['res', 'ext:mp4:m4a'],
     'user_agent': (
@@ -45,7 +43,6 @@ BASE_YTDL_OPTS = {
     ),
     'extractor_args': {
         'youtube': {
-            # عميل TV و iOS هما الأنجح حالياً في سيرفرات السحاب
             'player_client': ['tv', 'ios'],
         }
     },
@@ -119,13 +116,6 @@ def handle_download_choice(call):
 
   bot.answer_callback_query(call.id, 'جاري معالجة طلبك...')
 
-  # تشغيل الإعلان بشكل Async محدد لتفادي RuntimeWarning
-  if chanify:
-    try:
-      asyncio.run(chanify.show_ad(chat_id=user_id))
-    except Exception as e:
-      print(f'Chanify Error: {e}')
-
   status_msg = bot.send_message(
       user_id, '⏳ جاري تحميل وتجهيز الملف من السيرفر...'
   )
@@ -166,6 +156,15 @@ def handle_download_choice(call):
           '📤 جاري رفع الملف إلى المحادثة...', user_id, status_msg.message_id
       )
 
+      # تجهيز زر الإعلان إذا كان الرابط موجوداً في Render
+      ad_markup = None
+      if AD_DIRECT_LINK:
+        ad_markup = InlineKeyboardMarkup()
+        ad_btn = InlineKeyboardButton(
+            '🎁 اضغط هنا لدعم البوت / رابط الإعلان', url=AD_DIRECT_LINK
+        )
+        ad_markup.add(ad_btn)
+
       with open(file_path, 'rb') as f:
         if is_audio:
           bot.send_audio(
@@ -175,6 +174,7 @@ def handle_download_choice(call):
               performer='Downloader Bot',
               caption=f'🎵 **{title}**',
               parse_mode='Markdown',
+              reply_markup=ad_markup,  # إرفاق زر الإعلان
           )
         else:
           bot.send_video(
@@ -182,6 +182,7 @@ def handle_download_choice(call):
               f,
               caption=f'🎥 **{title}**',
               parse_mode='Markdown',
+              reply_markup=ad_markup,  # إرفاق زر الإعلان
           )
 
       bot.delete_message(user_id, status_msg.message_id)
