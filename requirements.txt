@@ -1,6 +1,6 @@
 pyTelegramBotAPI
-yt-dlp>=2024.08.01
-chanify
+yt-dlp
+Chanify
 Flask
 gunicorn
 requests
