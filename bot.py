@@ -10,19 +10,19 @@ import telebot
 from telebot.types import InlineKeyboardButton, InlineKeyboardMarkup
 import yt_dlp
 
-# --- 0. تثبيت وتفعيل FFmpeg ---
+# --- 1. إعداد FFmpeg ---
 try:
   static_ffmpeg.add_paths()
 except Exception as e:
-  print(f'FFmpeg setup warning: {e}')
+  print(f'FFmpeg Warning: {e}')
 
-# --- 1. خادم Flask للـ Keep-Alive ---
+# --- 2. خادم Flask للـ Keep-Alive ---
 app = Flask(__name__)
 
 
 @app.route('/')
 def health_check():
-  return 'Bot is running fine!'
+  return 'Bot Service Active'
 
 
 def run_server():
@@ -30,30 +30,27 @@ def run_server():
   app.run(host='0.0.0.0', port=port)
 
 
-# --- 2. Self-Ping ---
 def keep_alive_ping():
   time.sleep(15)
   url = 'https://nowm-downloader-bot-3-syg0.onrender.com'
   while True:
     try:
       requests.get(url, timeout=10)
-      print('Self-ping sent successfully!')
+      print('Keep-alive ping sent.')
     except Exception as e:
-      print(f'Self-ping failed: {e}')
+      print(f'Keep-alive failed: {e}')
     time.sleep(600)
 
 
 Thread(target=run_server, daemon=True).start()
 Thread(target=keep_alive_ping, daemon=True).start()
 
-# --- 3. إعداد البوت والمفاتيح ---
+# --- 3. تهيئة البوت والمفاتيح ---
 TOKEN = os.environ.get('TOKEN')
 CHANIFY_KEY = os.environ.get('CHANIFY_KEY')
 
 if not TOKEN:
-  raise ValueError(
-      '❌ خطأ: لم يتم ضبط متغير البيئة TOKEN في لوحة تحكم Render!'
-  )
+  raise ValueError('❌ لم يتم العثور على متغير البيئة TOKEN!')
 
 chanify = Chanify(CHANIFY_KEY) if CHANIFY_KEY else None
 bot = telebot.TeleBot(TOKEN)
@@ -61,22 +58,18 @@ bot = telebot.TeleBot(TOKEN)
 user_urls = {}
 COOKIE_FILE = 'cookies.txt'
 
-# إعدادات بسيطة ومباشرة لتجنب رفض الصيغ على Render
-COMMON_OPTS = {
+# إعدادات متوافقة معقيود السيرفرات السحابية
+BASE_YTDL_OPTS = {
     'quiet': True,
     'no_warnings': True,
     'nocheckcertificate': True,
     'geo_bypass': True,
-    'format': 'b/best',  # أسهل صيغة تضمن التحميل بدون خطأ Requested format
-    'extractor_args': {
-        'youtube': {
-            'player_client': ['ios', 'mweb'],
-        }
-    },
+    'format': 'best/bestvideo+bestaudio',  # اختيار أسهل صيغة متوفرة
+    'extractor_args': {'youtube': {'player_client': ['mweb', 'ios']}},
 }
 
 if os.path.exists(COOKIE_FILE):
-  COMMON_OPTS['cookiefile'] = COOKIE_FILE
+  BASE_YTDL_OPTS['cookiefile'] = COOKIE_FILE
 
 
 @bot.message_handler(commands=['start'])
@@ -122,7 +115,7 @@ def handle_download_choice(call):
     )
     return
 
-  bot.answer_callback_query(call.id, 'جاري فحص الرابط ومعالجته...')
+  bot.answer_callback_query(call.id, 'جاري معالجة طلبك...')
 
   if chanify:
     try:
@@ -130,18 +123,18 @@ def handle_download_choice(call):
     except Exception as e:
       print(f'Chanify Error: {e}')
 
-  status_msg = bot.send_message(user_id, '🔍 جاري فحص الملف ومعرفة الحجم...')
+  status_msg = bot.send_message(user_id, '🔍 جاري فحص الرابط والمعلومات...')
 
   is_audio = call.data == 'dl_audio'
   is_tiktok = 'tiktok.com' in url.lower()
   file_path = None
 
   try:
-    ydl_info_opts = COMMON_OPTS.copy()
     filesize_mb = 0
     title = 'Media_File'
 
-    with yt_dlp.YoutubeDL(ydl_info_opts) as ydl:
+    # 1. جلب معلومات الملف
+    with yt_dlp.YoutubeDL(BASE_YTDL_OPTS) as ydl:
       try:
         info = ydl.extract_info(url, download=False)
         title = info.get('title', 'Media_File')
@@ -152,79 +145,81 @@ def handle_download_choice(call):
 
     if filesize_mb > 50 and not is_tiktok:
       bot.edit_message_text(
-          f'⚠️ **حجم الملف كبير ({filesize_mb:.1f} MB)** ويتجاوز حد الـ 50MB'
-          ' المسموح به للرفع المباشر داخل تلجرام.',
+          f'⚠️ **حجم الملف كبير ({filesize_mb:.1f} MB)** ويتجاوز الحد المسموح'
+          ' به (50MB) للرفع في تلجرام.',
           user_id,
           status_msg.message_id,
           parse_mode='Markdown',
       )
-    else:
-      bot.edit_message_text(
-          '⏳ جاري تحميل وتجهيز الملف...', user_id, status_msg.message_id
-      )
+      return
 
-      ydl_dl_opts = COMMON_OPTS.copy()
-      os.makedirs('downloads', exist_ok=True)
-      filename_template = f'downloads/{user_id}_%(id)s.%(ext)s'
+    bot.edit_message_text(
+        '⏳ جاري تحميل وتجهيز الملف...', user_id, status_msg.message_id
+    )
+
+    # 2. تحديد إعدادات التنزيل
+    os.makedirs('downloads', exist_ok=True)
+    filename_template = f'downloads/{user_id}_{int(time.time())}.%(ext)s'
+
+    ydl_dl_opts = BASE_YTDL_OPTS.copy()
+    ydl_dl_opts['outtmpl'] = filename_template
+
+    if is_audio:
+      ydl_dl_opts.update({
+          'format': 'ba/bestaudio/b',
+          'postprocessors': [{
+              'key': 'FFmpegExtractAudio',
+              'preferredcodec': 'mp3',
+              'preferredquality': '192',
+          }],
+      })
+    else:
+      ydl_dl_opts.update({
+          'format': 'b/best/bestvideo+bestaudio',
+      })
+
+    # 3. عملية التنزيل والرفع
+    with yt_dlp.YoutubeDL(ydl_dl_opts) as ydl:
+      download_info = ydl.extract_info(url, download=True)
+      file_path = ydl.prepare_filename(download_info)
 
       if is_audio:
-        ydl_dl_opts.update({
-            'format': 'ba/b',
-            'outtmpl': filename_template,
-            'postprocessors': [{
-                'key': 'FFmpegExtractAudio',
-                'preferredcodec': 'mp3',
-                'preferredquality': '192',
-            }],
-        })
-      else:
-        ydl_dl_opts.update({
-            'format': 'b/best',
-            'outtmpl': filename_template,
-        })
+        base_path = os.path.splitext(file_path)[0]
+        if os.path.exists(base_path + '.mp3'):
+          file_path = base_path + '.mp3'
 
-      with yt_dlp.YoutubeDL(ydl_dl_opts) as ydl:
-        download_info = ydl.extract_info(url, download=True)
-        file_path = ydl.prepare_filename(download_info)
+    if file_path and os.path.exists(file_path):
+      bot.edit_message_text(
+          '📤 جاري رفع الملف إلى المحادثة...', user_id, status_msg.message_id
+      )
 
+      with open(file_path, 'rb') as f:
         if is_audio:
-          base_path = os.path.splitext(file_path)[0]
-          if os.path.exists(base_path + '.mp3'):
-            file_path = base_path + '.mp3'
+          bot.send_audio(
+              user_id,
+              f,
+              title=title,
+              performer='Downloader Bot',
+              caption=f'🎵 **{title}**',
+              parse_mode='Markdown',
+          )
+        else:
+          bot.send_video(
+              user_id,
+              f,
+              caption=f'🎥 **{title}**',
+              parse_mode='Markdown',
+          )
 
-      if file_path and os.path.exists(file_path):
-        bot.edit_message_text(
-            '📤 جاري رفع الملف إلى محادثتك...', user_id, status_msg.message_id
-        )
-
-        with open(file_path, 'rb') as f:
-          if is_audio:
-            bot.send_audio(
-                user_id,
-                f,
-                title=title,
-                performer='Smart Downloader',
-                caption=f'🎵 **{title}**',
-                parse_mode='Markdown',
-            )
-          else:
-            bot.send_video(
-                user_id,
-                f,
-                caption=f'🎥 **{title}**',
-                parse_mode='Markdown',
-            )
-
-        bot.delete_message(user_id, status_msg.message_id)
-      else:
-        bot.send_message(user_id, 'تعذر العثور على الملف بعد المعالجة.')
+      bot.delete_message(user_id, status_msg.message_id)
+    else:
+      bot.send_message(user_id, 'تعذر الوصول إلى الملف بعد التحميل.')
 
   except Exception as e:
     print(f'Error Details: {e}')
     bot.send_message(
         user_id,
-        'حدث خطأ أثناء معالجة الرابط، يرجى التأكد من الرابط أو المحاولة'
-        ' لاحقاً.',
+        'حدث خطأ أثناء معالجة الرابط، يرجى التأكد من الرابط أو المحاولة لاحقاً.',
     )
 
   finally:
@@ -235,20 +230,25 @@ def handle_download_choice(call):
         print(f'Cleanup Error: {clean_err}')
 
 
-# --- 4. تشغيل البوت مع تنظيف الـ Webhook لتفادي Conflict 409 ---
-print('Smart Downloader Bot is running...')
+# --- 4. بدء تشغيل البوت وحل التعارضات ---
+if __name__ == '__main__':
+  print('Starting bot instance...')
 
-try:
-  bot.remove_webhook()
-  time.sleep(2)
-except Exception as e:
-  print(f'Webhook Removal Warning: {e}')
-
-while True:
+  # حذف الـ webhook والتحديثات المعلقة لتجنب Error 409
   try:
-    bot.infinity_polling(
-        timeout=30, long_polling_timeout=15, skip_pending=True
-    )
+    bot.remove_webhook()
+    time.sleep(1)
   except Exception as e:
-    print(f'Polling Exception Handled: {e}')
-    time.sleep(5)
+    print(f'Webhook reset warning: {e}')
+
+  while True:
+    try:
+      bot.infinity_polling(
+          timeout=20,
+          long_polling_timeout=10,
+          skip_pending=True,
+          restart_on_change=False,
+      )
+    except Exception as e:
+      print(f'Polling Exception Handled: {e}')
+      time.sleep(3)
