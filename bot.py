@@ -61,11 +61,17 @@ bot = telebot.TeleBot(TOKEN)
 user_urls = {}
 COOKIE_FILE = 'cookies.txt'
 
+# إعدادات متوافقة لتجاوز حظر YouTube BOT
 COMMON_OPTS = {
     'quiet': True,
     'no_warnings': True,
     'nocheckcertificate': True,
     'geo_bypass': True,
+    'extractor_args': {
+        'youtube': {
+            'player_client': ['android'],
+        }
+    },
 }
 
 if os.path.exists(COOKIE_FILE):
@@ -160,10 +166,9 @@ def handle_download_choice(call):
       os.makedirs('downloads', exist_ok=True)
       filename_template = f'downloads/{user_id}_%(id)s.%(ext)s'
 
-      # صيغة شاملة ومرنة لتجنب Requested format is not available
       if is_audio:
         ydl_dl_opts.update({
-            'format': 'bestaudio/best',
+            'format': 'ba/b',
             'outtmpl': filename_template,
             'postprocessors': [{
                 'key': 'FFmpegExtractAudio',
@@ -173,8 +178,9 @@ def handle_download_choice(call):
         })
       else:
         ydl_dl_opts.update({
-            'format': 'best',  # يجلب أفضل ملف جاهز يحتوي صوت وفيديو مباشرة
+            'format': 'bv*+ba/b',
             'outtmpl': filename_template,
+            'merge_output_format': 'mp4',
         })
 
       with yt_dlp.YoutubeDL(ydl_dl_opts) as ydl:
