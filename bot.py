@@ -58,14 +58,15 @@ bot = telebot.TeleBot(TOKEN)
 user_urls = {}
 COOKIE_FILE = 'cookies.txt'
 
-# إعدادات متوافقة معقيود السيرفرات السحابية
+# --- إعدادات yt_dlp المبسطة لحل قيود Render ---
 BASE_YTDL_OPTS = {
     'quiet': True,
     'no_warnings': True,
     'nocheckcertificate': True,
     'geo_bypass': True,
-    'format': 'best/bestvideo+bestaudio',  # اختيار أسهل صيغة متوفرة
-    'extractor_args': {'youtube': {'player_client': ['mweb', 'ios']}},
+    'format': 'b/best',  # تنزيل أسهل صيغة جاهزة لتفادي خطأ Requested format is not available
+    'format_sort': ['res', 'ext:mp4:m4a'],
+    'extractor_args': {'youtube': {'player_client': ['android', 'ios', 'mweb']}},
 }
 
 if os.path.exists(COOKIE_FILE):
@@ -166,7 +167,7 @@ def handle_download_choice(call):
 
     if is_audio:
       ydl_dl_opts.update({
-          'format': 'ba/bestaudio/b',
+          'format': 'ba/best',
           'postprocessors': [{
               'key': 'FFmpegExtractAudio',
               'preferredcodec': 'mp3',
@@ -175,7 +176,7 @@ def handle_download_choice(call):
       })
     else:
       ydl_dl_opts.update({
-          'format': 'b/best/bestvideo+bestaudio',
+          'format': 'b/best',
       })
 
     # 3. عملية التنزيل والرفع
@@ -230,14 +231,13 @@ def handle_download_choice(call):
         print(f'Cleanup Error: {clean_err}')
 
 
-# --- 4. بدء تشغيل البوت وحل التعارضات ---
+# --- 4. تشغيل البوت وإغلاق الجلسات السابقة ---
 if __name__ == '__main__':
   print('Starting bot instance...')
 
-  # حذف الـ webhook والتحديثات المعلقة لتجنب Error 409
   try:
     bot.remove_webhook()
-    time.sleep(1)
+    time.sleep(2)
   except Exception as e:
     print(f'Webhook reset warning: {e}')
 
@@ -251,4 +251,4 @@ if __name__ == '__main__':
       )
     except Exception as e:
       print(f'Polling Exception Handled: {e}')
-      time.sleep(3)
+      time.sleep(5)
