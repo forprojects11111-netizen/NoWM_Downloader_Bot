@@ -28,22 +28,24 @@ chanify = Chanify(CHANIFY_KEY) if CHANIFY_KEY else None
 user_urls = {}
 COOKIE_FILE = 'cookies.txt'
 
-# --- 3. إعدادات yt-dlp المتوافقة مع YouTube Shorts والمقاطع المقيدة ---
+# --- 3. إعدادات yt-dlp لتجاوز حظر السيرفرات (Render/Datacenter IPs) ---
 BASE_YTDL_OPTS = {
     'quiet': True,
     'no_warnings': True,
     'nocheckcertificate': True,
     'geo_bypass': True,
     'ignoreerrors': False,
-    # اختيار الجودة الأفضل أو أي فيديو/صوت متاح بدون اشتراط صيغة معينة
-    'format': 'best',
+    # اختيار أكثر صيغة مرونة مدمجة لتجنب طلب جودات منفصلة محظورة
+    'format': 'b/best/bv*+ba',
+    'format_sort': ['res', 'ext:mp4:m4a'],
     'user_agent': (
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML,'
-        ' like Gecko) Chrome/125.0.0.0 Safari/537.36'
+        'Mozilla/5.0 (SmartHUB; SMART-TV; U; Linux/SmartTV) AppleWebKit/537.42'
+        ' (KHTML, like Gecko) SmartTV Safari/537.42'
     ),
     'extractor_args': {
         'youtube': {
-            'player_client': ['android', 'web'],
+            # عميل TV و iOS هما الأنجح حالياً في سيرفرات السحاب
+            'player_client': ['tv', 'ios'],
         }
     },
 }
@@ -137,7 +139,7 @@ def handle_download_choice(call):
 
     if is_audio:
       ydl_dl_opts.update({
-          'format': 'bestaudio/best',
+          'format': 'ba/ba*/best',
           'postprocessors': [{
               'key': 'FFmpegExtractAudio',
               'preferredcodec': 'mp3',
