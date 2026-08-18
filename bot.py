@@ -32,7 +32,7 @@ def run_server():
 
 # --- 2. Self-Ping ---
 def keep_alive_ping():
-  time.sleep(10)
+  time.sleep(15)
   url = 'https://nowm-downloader-bot-3-syg0.onrender.com'
   while True:
     try:
@@ -61,20 +61,16 @@ bot = telebot.TeleBot(TOKEN)
 user_urls = {}
 COOKIE_FILE = 'cookies.txt'
 
-# إعدادات متقدمة لتجاوز حظر Render IP
+# إعدادات بسيطة ومباشرة لتجنب رفض الصيغ على Render
 COMMON_OPTS = {
     'quiet': True,
     'no_warnings': True,
     'nocheckcertificate': True,
     'geo_bypass': True,
-    'user_agent': (
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML,'
-        ' like Gecko) Chrome/125.0.0.0 Safari/537.36'
-    ),
+    'format': 'b/best',  # أسهل صيغة تضمن التحميل بدون خطأ Requested format
     'extractor_args': {
         'youtube': {
-            'player_client': ['web', 'mweb', 'ios'],
-            'skip': ['hls', 'dash'],
+            'player_client': ['ios', 'mweb'],
         }
     },
 }
@@ -142,7 +138,6 @@ def handle_download_choice(call):
 
   try:
     ydl_info_opts = COMMON_OPTS.copy()
-    ydl_info_opts['format'] = 'b/worst'  # أبسط صيغة متوفرة لمنع خطأ Format
     filesize_mb = 0
     title = 'Media_File'
 
@@ -174,7 +169,7 @@ def handle_download_choice(call):
 
       if is_audio:
         ydl_dl_opts.update({
-            'format': 'ba/b/best',
+            'format': 'ba/b',
             'outtmpl': filename_template,
             'postprocessors': [{
                 'key': 'FFmpegExtractAudio',
@@ -183,13 +178,9 @@ def handle_download_choice(call):
             }],
         })
       else:
-        # صيغ يوتيوب الجاهزة المدمجة لتفادي مشاكل التفاوض
         ydl_dl_opts.update({
-            'format': (
-                'best[ext=mp4]/bestvideo+bestaudio/b[ext=mp4]/best/worst'
-            ),
+            'format': 'b/best',
             'outtmpl': filename_template,
-            'merge_output_format': 'mp4',
         })
 
       with yt_dlp.YoutubeDL(ydl_dl_opts) as ydl:
@@ -244,18 +235,19 @@ def handle_download_choice(call):
         print(f'Cleanup Error: {clean_err}')
 
 
-# --- 4. تشغيل البوت ---
+# --- 4. تشغيل البوت مع تنظيف الـ Webhook لتفادي Conflict 409 ---
 print('Smart Downloader Bot is running...')
 
 try:
   bot.remove_webhook()
+  time.sleep(2)
 except Exception as e:
   print(f'Webhook Removal Warning: {e}')
 
 while True:
   try:
     bot.infinity_polling(
-        timeout=20, long_polling_timeout=10, skip_pending=True
+        timeout=30, long_polling_timeout=15, skip_pending=True
     )
   except Exception as e:
     print(f'Polling Exception Handled: {e}')
