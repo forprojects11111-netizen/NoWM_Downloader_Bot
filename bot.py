@@ -1,9 +1,7 @@
 import os
 import time
-from threading import Thread
 from chanify import Chanify
 from flask import Flask, request
-import requests
 import static_ffmpeg
 import telebot
 from telebot.types import InlineKeyboardButton, InlineKeyboardMarkup, Update
@@ -15,7 +13,7 @@ try:
 except Exception as e:
   print(f'FFmpeg Warning: {e}')
 
-# --- 2. إعدادات المتغيرات والبوت ---
+# --- 2. إعداد المتغيرات ---
 TOKEN = os.environ.get('TOKEN')
 CHANIFY_KEY = os.environ.get('CHANIFY_KEY')
 RENDER_EXTERNAL_URL = os.environ.get(
@@ -30,15 +28,15 @@ chanify = Chanify(CHANIFY_KEY) if CHANIFY_KEY else None
 user_urls = {}
 COOKIE_FILE = 'cookies.txt'
 
-# --- 3. إعدادات yt-dlp المتوافقة مع سيرفرات Render ---
+# --- 3. إعدادات yt-dlp المرنة للغاية لمنع حظر Render ---
 BASE_YTDL_OPTS = {
     'quiet': True,
     'no_warnings': True,
     'nocheckcertificate': True,
     'geo_bypass': True,
     'ignoreerrors': True,
-    # صيغة مرنة تضمن عدم التوقف عند خطأ Requested format is not available
-    'format': 'b/bv*+ba/best',
+    # اختيار الصيغ الأكثر توافقاً بالترتيب دون إجبار السيرفر على خيار محدد
+    'format': 'best/bestvideo+bestaudio/b',
     'extractor_args': {
         'youtube': {'player_client': ['android', 'ios', 'web', 'mweb']}
     },
@@ -47,7 +45,7 @@ BASE_YTDL_OPTS = {
 if os.path.exists(COOKIE_FILE):
   BASE_YTDL_OPTS['cookiefile'] = COOKIE_FILE
 
-# --- 4. خادم Flask واستقبال الـ Webhook ---
+# --- 4. تطبيق Flask ---
 app = Flask(__name__)
 
 
@@ -66,7 +64,7 @@ def webhook():
   return 'Forbidden', 403
 
 
-# --- 5. منطق البوت والتنزيل ---
+# --- 5. التعامل مع الرسائل والأوامر ---
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
   bot.reply_to(
@@ -133,7 +131,7 @@ def handle_download_choice(call):
 
     if is_audio:
       ydl_dl_opts.update({
-          'format': 'ba/b/best',
+          'format': 'bestaudio/best',
           'postprocessors': [{
               'key': 'FFmpegExtractAudio',
               'preferredcodec': 'mp3',
@@ -142,11 +140,12 @@ def handle_download_choice(call):
       })
 
     with yt_dlp.YoutubeDL(ydl_dl_opts) as ydl:
-      download_info = ydl.extract_info(url, download=True)
+      # استخراج وتنزيل مباشر
+      info_dict = ydl.extract_info(url, download=True)
 
-      if download_info:
-        title = download_info.get('title', 'Media_File')
-        file_path = ydl.prepare_filename(download_info)
+      if info_dict:
+        title = info_dict.get('title', 'Media_File')
+        file_path = ydl.prepare_filename(info_dict)
 
         if is_audio:
           base_path = os.path.splitext(file_path)[0]
@@ -200,15 +199,13 @@ def handle_download_choice(call):
         print(f'Cleanup Error: {clean_err}')
 
 
-# --- 6. تشغيل التطبيق وتفعيل الـ Webhook ---
+# --- 6. تشغيل الـ Webhook والسيرفر ---
 if __name__ == '__main__':
-  # إعادة إعداد الـ Webhook لضمان ربطه بالمسار الصحيح
   webhook_url = f'{RENDER_EXTERNAL_URL}/{TOKEN}'
   bot.remove_webhook()
   time.sleep(2)
   bot.set_webhook(url=webhook_url)
   print(f'Webhook set to {webhook_url}')
 
-  # تشغيل خادم Flask على المنفذ المطلوب
   port = int(os.environ.get('PORT', 10000))
   app.run(host='0.0.0.0', port=port)
