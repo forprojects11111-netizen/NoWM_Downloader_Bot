@@ -1,13 +1,12 @@
 import os
-import re
 import time
 from threading import Thread
 from chanify import Chanify
-from flask import Flask
+from flask import Flask, request
 import requests
 import static_ffmpeg
 import telebot
-from telebot.types import InlineKeyboardButton, InlineKeyboardMarkup
+from telebot.types import InlineKeyboardButton, InlineKeyboardMarkup, Update
 import yt_dlp
 
 # --- 1. إعداد FFmpeg ---
@@ -16,7 +15,41 @@ try:
 except Exception as e:
   print(f'FFmpeg Warning: {e}')
 
-# --- 2. خادم Flask ---
+# --- 2. إعدادات المتغيرات والبوت ---
+TOKEN = os.environ.get('TOKEN')
+CHANIFY_KEY = os.environ.get('CHANIFY_KEY')
+RENDER_EXTERNAL_URL = os.environ.get(
+    'RENDER_EXTERNAL_URL', 'https://nowm-downloader-bot-3-syg0.onrender.com'
+)
+
+if not TOKEN:
+  raise ValueError('❌ لم يتم العثور على TOKEN!')
+
+bot = telebot.TeleBot(TOKEN)
+chanify = Chanify(CHANIFY_KEY) if CHANIFY_KEY else None
+user_urls = {}
+COOKIE_FILE = 'cookies.txt'
+
+# --- 3. إعدادات yt-dlp المتوافقة مع حظر Render ---
+BASE_YTDL_OPTS = {
+    'quiet': True,
+    'no_warnings': True,
+    'nocheckcertificate': True,
+    'geo_bypass': True,
+    'ignoreerrors': True,
+    # صيغة مرنة تبحث عن ملف صوت وفيديو جاهز في ملف واحد بدلاً من طلب دمج مفصل
+    'format': (
+        'best[ext=mp4]/bestvideo[ext=mp4]+bestaudio[ext=m4a]/best/bestvideo+bestaudio'
+    ),
+    'extractor_args': {
+        'youtube': {'player_client': ['android', 'ios', 'mweb', 'tv_embedded']}
+    },
+}
+
+if os.path.exists(COOKIE_FILE):
+  BASE_YTDL_OPTS['cookiefile'] = COOKIE_FILE
+
+# --- 4. خادم Flask واستقبال الـ Webhook ---
 app = Flask(__name__)
 
 
@@ -25,56 +58,25 @@ def health_check():
   return 'Bot Service Active'
 
 
+@app.route(f'/{TOKEN}', methods=['POST'])
+def webhook():
+  if request.headers.get('content-type') == 'application/json':
+    json_string = request.get_data().decode('utf-8')
+    update = Update.de_json(json_string)
+    bot.process_new_updates([update])
+    return 'OK', 200
+  return 'Forbidden', 403
+
+
 def run_server():
-  port = int(os.environ.get('PORT', 8080))
+  port = int(os.environ.get('PORT', 10000))
   app.run(host='0.0.0.0', port=port)
 
 
-def keep_alive_ping():
-  time.sleep(20)
-  url = 'https://nowm-downloader-bot-3-syg0.onrender.com'
-  while True:
-    try:
-      requests.get(url, timeout=10)
-    except Exception as e:
-      print(f'Keep-alive failed: {e}')
-    time.sleep(600)
-
-
 Thread(target=run_server, daemon=True).start()
-Thread(target=keep_alive_ping, daemon=True).start()
-
-# --- 3. تهيئة البوت ---
-TOKEN = os.environ.get('TOKEN')
-CHANIFY_KEY = os.environ.get('CHANIFY_KEY')
-
-if not TOKEN:
-  raise ValueError('❌ لم يتم العثور على TOKEN!')
-
-chanify = Chanify(CHANIFY_KEY) if CHANIFY_KEY else None
-bot = telebot.TeleBot(TOKEN)
-
-user_urls = {}
-COOKIE_FILE = 'cookies.txt'
-
-# --- إعدادات yt-dlp المرنة للسيرفرات السحابية ---
-BASE_YTDL_OPTS = {
-    'quiet': True,
-    'no_warnings': True,
-    'nocheckcertificate': True,
-    'geo_bypass': True,
-    # اختيار صيغة جاهزة مسبقاً يمنع خطأ Requested format
-    'format': 'best',
-    'format_sort': ['res', 'ext:mp4:m4a'],
-    'extractor_args': {
-        'youtube': {'player_client': ['android', 'ios', 'mweb', 'web']}
-    },
-}
-
-if os.path.exists(COOKIE_FILE):
-  BASE_YTDL_OPTS['cookiefile'] = COOKIE_FILE
 
 
+# --- 5. منطق البوت والتنزيل ---
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
   bot.reply_to(
@@ -129,38 +131,15 @@ def handle_download_choice(call):
   status_msg = bot.send_message(user_id, '🔍 جاري فحص الرابط والمعلومات...')
 
   is_audio = call.data == 'dl_audio'
-  is_tiktok = 'tiktok.com' in url.lower()
   file_path = None
 
   try:
-    filesize_mb = 0
     title = 'Media_File'
-
-    # 1. جلب معلومات الملف
-    with yt_dlp.YoutubeDL(BASE_YTDL_OPTS) as ydl:
-      try:
-        info = ydl.extract_info(url, download=False)
-        title = info.get('title', 'Media_File')
-        filesize = info.get('filesize') or info.get('filesize_approx') or 0
-        filesize_mb = filesize / (1024 * 1024) if filesize else 0
-      except Exception as info_err:
-        print(f'Info Fetch Warning: {info_err}')
-
-    if filesize_mb > 50 and not is_tiktok:
-      bot.edit_message_text(
-          f'⚠️ **حجم الملف كبير ({filesize_mb:.1f} MB)** ويتجاوز الحد المسموح'
-          ' به (50MB) للرفع في تلجرام.',
-          user_id,
-          status_msg.message_id,
-          parse_mode='Markdown',
-      )
-      return
 
     bot.edit_message_text(
         '⏳ جاري تحميل وتجهيز الملف...', user_id, status_msg.message_id
     )
 
-    # 2. تحديد إعدادات التنزيل
     os.makedirs('downloads', exist_ok=True)
     filename_template = f'downloads/{user_id}_{int(time.time())}.%(ext)s'
 
@@ -176,20 +155,17 @@ def handle_download_choice(call):
               'preferredquality': '192',
           }],
       })
-    else:
-      ydl_dl_opts.update({
-          'format': 'best',
-      })
 
-    # 3. التنزيل
     with yt_dlp.YoutubeDL(ydl_dl_opts) as ydl:
       download_info = ydl.extract_info(url, download=True)
-      file_path = ydl.prepare_filename(download_info)
+      if download_info:
+        title = download_info.get('title', 'Media_File')
+        file_path = ydl.prepare_filename(download_info)
 
-      if is_audio:
-        base_path = os.path.splitext(file_path)[0]
-        if os.path.exists(base_path + '.mp3'):
-          file_path = base_path + '.mp3'
+        if is_audio:
+          base_path = os.path.splitext(file_path)[0]
+          if os.path.exists(base_path + '.mp3'):
+            file_path = base_path + '.mp3'
 
     if file_path and os.path.exists(file_path):
       bot.edit_message_text(
@@ -216,7 +192,11 @@ def handle_download_choice(call):
 
       bot.delete_message(user_id, status_msg.message_id)
     else:
-      bot.send_message(user_id, 'تعذر الوصول إلى الملف بعد التحميل.')
+      bot.edit_message_text(
+          '❌ تعذر استخراج الفيديو بسبب قيود السيرفر، جرب رابط آخر.',
+          user_id,
+          status_msg.message_id,
+      )
 
   except Exception as e:
     print(f'Error Details: {e}')
@@ -233,24 +213,15 @@ def handle_download_choice(call):
         print(f'Cleanup Error: {clean_err}')
 
 
-# --- 4. التشغيل ومنع الـ Conflict ---
+# --- 6. تفعيل الـ Webhook عند بدء التشغيل ---
 if __name__ == '__main__':
-  # إلغاء أي Session قديمة من تلجرام
-  try:
-    bot.remove_webhook()
-    time.sleep(2)
-  except Exception as e:
-    print(f'Webhook reset error: {e}')
+  time.sleep(2)
+  webhook_url = f'{RENDER_EXTERNAL_URL}/{TOKEN}'
+  bot.remove_webhook()
+  time.sleep(1)
+  bot.set_webhook(url=webhook_url)
+  print(f'Webhook set to {webhook_url}')
 
+  # إبقاء التطبيق قيد التشغيل عبر Flask
   while True:
-    try:
-      bot.polling(
-          non_stop=True,
-          interval=2,
-          timeout=30,
-          long_polling_timeout=20,
-          skip_pending=True,
-      )
-    except Exception as e:
-      print(f'Polling Exception Handled: {e}')
-      time.sleep(5)
+    time.sleep(3600)
