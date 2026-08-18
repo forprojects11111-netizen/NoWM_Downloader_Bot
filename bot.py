@@ -16,7 +16,7 @@ try:
 except Exception as e:
   print(f'FFmpeg Warning: {e}')
 
-# --- 2. خادم Flask للـ Keep-Alive ---
+# --- 2. خادم Flask ---
 app = Flask(__name__)
 
 
@@ -31,12 +31,11 @@ def run_server():
 
 
 def keep_alive_ping():
-  time.sleep(15)
+  time.sleep(20)
   url = 'https://nowm-downloader-bot-3-syg0.onrender.com'
   while True:
     try:
       requests.get(url, timeout=10)
-      print('Keep-alive ping sent.')
     except Exception as e:
       print(f'Keep-alive failed: {e}')
     time.sleep(600)
@@ -45,12 +44,12 @@ def keep_alive_ping():
 Thread(target=run_server, daemon=True).start()
 Thread(target=keep_alive_ping, daemon=True).start()
 
-# --- 3. تهيئة البوت والمفاتيح ---
+# --- 3. تهيئة البوت ---
 TOKEN = os.environ.get('TOKEN')
 CHANIFY_KEY = os.environ.get('CHANIFY_KEY')
 
 if not TOKEN:
-  raise ValueError('❌ لم يتم العثور على متغير البيئة TOKEN!')
+  raise ValueError('❌ لم يتم العثور على TOKEN!')
 
 chanify = Chanify(CHANIFY_KEY) if CHANIFY_KEY else None
 bot = telebot.TeleBot(TOKEN)
@@ -58,15 +57,18 @@ bot = telebot.TeleBot(TOKEN)
 user_urls = {}
 COOKIE_FILE = 'cookies.txt'
 
-# --- إعدادات yt_dlp المبسطة لحل قيود Render ---
+# --- إعدادات yt-dlp المرنة للسيرفرات السحابية ---
 BASE_YTDL_OPTS = {
     'quiet': True,
     'no_warnings': True,
     'nocheckcertificate': True,
     'geo_bypass': True,
-    'format': 'b/best',  # تنزيل أسهل صيغة جاهزة لتفادي خطأ Requested format is not available
+    # اختيار صيغة جاهزة مسبقاً يمنع خطأ Requested format
+    'format': 'best',
     'format_sort': ['res', 'ext:mp4:m4a'],
-    'extractor_args': {'youtube': {'player_client': ['android', 'ios', 'mweb']}},
+    'extractor_args': {
+        'youtube': {'player_client': ['android', 'ios', 'mweb', 'web']}
+    },
 }
 
 if os.path.exists(COOKIE_FILE):
@@ -167,7 +169,7 @@ def handle_download_choice(call):
 
     if is_audio:
       ydl_dl_opts.update({
-          'format': 'ba/best',
+          'format': 'bestaudio/best',
           'postprocessors': [{
               'key': 'FFmpegExtractAudio',
               'preferredcodec': 'mp3',
@@ -176,10 +178,10 @@ def handle_download_choice(call):
       })
     else:
       ydl_dl_opts.update({
-          'format': 'b/best',
+          'format': 'best',
       })
 
-    # 3. عملية التنزيل والرفع
+    # 3. التنزيل
     with yt_dlp.YoutubeDL(ydl_dl_opts) as ydl:
       download_info = ydl.extract_info(url, download=True)
       file_path = ydl.prepare_filename(download_info)
@@ -231,23 +233,23 @@ def handle_download_choice(call):
         print(f'Cleanup Error: {clean_err}')
 
 
-# --- 4. تشغيل البوت وإغلاق الجلسات السابقة ---
+# --- 4. التشغيل ومنع الـ Conflict ---
 if __name__ == '__main__':
-  print('Starting bot instance...')
-
+  # إلغاء أي Session قديمة من تلجرام
   try:
     bot.remove_webhook()
     time.sleep(2)
   except Exception as e:
-    print(f'Webhook reset warning: {e}')
+    print(f'Webhook reset error: {e}')
 
   while True:
     try:
-      bot.infinity_polling(
-          timeout=20,
-          long_polling_timeout=10,
+      bot.polling(
+          non_stop=True,
+          interval=2,
+          timeout=30,
+          long_polling_timeout=20,
           skip_pending=True,
-          restart_on_change=False,
       )
     except Exception as e:
       print(f'Polling Exception Handled: {e}')
