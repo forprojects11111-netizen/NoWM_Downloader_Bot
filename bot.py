@@ -30,19 +30,17 @@ chanify = Chanify(CHANIFY_KEY) if CHANIFY_KEY else None
 user_urls = {}
 COOKIE_FILE = 'cookies.txt'
 
-# --- 3. إعدادات yt-dlp المتوافقة مع حظر Render ---
+# --- 3. إعدادات yt-dlp المتوافقة مع سيرفرات Render ---
 BASE_YTDL_OPTS = {
     'quiet': True,
     'no_warnings': True,
     'nocheckcertificate': True,
     'geo_bypass': True,
     'ignoreerrors': True,
-    # صيغة مرنة تبحث عن ملف صوت وفيديو جاهز في ملف واحد بدلاً من طلب دمج مفصل
-    'format': (
-        'best[ext=mp4]/bestvideo[ext=mp4]+bestaudio[ext=m4a]/best/bestvideo+bestaudio'
-    ),
+    # صيغة مرنة تضمن عدم التوقف عند خطأ Requested format is not available
+    'format': 'b/bv*+ba/best',
     'extractor_args': {
-        'youtube': {'player_client': ['android', 'ios', 'mweb', 'tv_embedded']}
+        'youtube': {'player_client': ['android', 'ios', 'web', 'mweb']}
     },
 }
 
@@ -66,14 +64,6 @@ def webhook():
     bot.process_new_updates([update])
     return 'OK', 200
   return 'Forbidden', 403
-
-
-def run_server():
-  port = int(os.environ.get('PORT', 10000))
-  app.run(host='0.0.0.0', port=port)
-
-
-Thread(target=run_server, daemon=True).start()
 
 
 # --- 5. منطق البوت والتنزيل ---
@@ -128,18 +118,13 @@ def handle_download_choice(call):
     except Exception as e:
       print(f'Chanify Error: {e}')
 
-  status_msg = bot.send_message(user_id, '🔍 جاري فحص الرابط والمعلومات...')
-
+  status_msg = bot.send_message(
+      user_id, '⏳ جاري تحميل وتجهيز الملف من السيرفر...'
+  )
   is_audio = call.data == 'dl_audio'
   file_path = None
 
   try:
-    title = 'Media_File'
-
-    bot.edit_message_text(
-        '⏳ جاري تحميل وتجهيز الملف...', user_id, status_msg.message_id
-    )
-
     os.makedirs('downloads', exist_ok=True)
     filename_template = f'downloads/{user_id}_{int(time.time())}.%(ext)s'
 
@@ -148,7 +133,7 @@ def handle_download_choice(call):
 
     if is_audio:
       ydl_dl_opts.update({
-          'format': 'bestaudio/best',
+          'format': 'ba/b/best',
           'postprocessors': [{
               'key': 'FFmpegExtractAudio',
               'preferredcodec': 'mp3',
@@ -158,6 +143,7 @@ def handle_download_choice(call):
 
     with yt_dlp.YoutubeDL(ydl_dl_opts) as ydl:
       download_info = ydl.extract_info(url, download=True)
+
       if download_info:
         title = download_info.get('title', 'Media_File')
         file_path = ydl.prepare_filename(download_info)
@@ -193,16 +179,17 @@ def handle_download_choice(call):
       bot.delete_message(user_id, status_msg.message_id)
     else:
       bot.edit_message_text(
-          '❌ تعذر استخراج الفيديو بسبب قيود السيرفر، جرب رابط آخر.',
+          '❌ تعذر استخراج الفيديو، قد يكون الرابط مقيداً أو غير متاح.',
           user_id,
           status_msg.message_id,
       )
 
   except Exception as e:
     print(f'Error Details: {e}')
-    bot.send_message(
+    bot.edit_message_text(
+        'حدث خطأ أثناء معالجة الرابط، يرجى التأكد من صحته والمحاولة لاحقاً.',
         user_id,
-        'حدث خطأ أثناء معالجة الرابط، يرجى التأكد من الرابط أو المحاولة لاحقاً.',
+        status_msg.message_id,
     )
 
   finally:
@@ -213,15 +200,15 @@ def handle_download_choice(call):
         print(f'Cleanup Error: {clean_err}')
 
 
-# --- 6. تفعيل الـ Webhook عند بدء التشغيل ---
+# --- 6. تشغيل التطبيق وتفعيل الـ Webhook ---
 if __name__ == '__main__':
-  time.sleep(2)
+  # إعادة إعداد الـ Webhook لضمان ربطه بالمسار الصحيح
   webhook_url = f'{RENDER_EXTERNAL_URL}/{TOKEN}'
   bot.remove_webhook()
-  time.sleep(1)
+  time.sleep(2)
   bot.set_webhook(url=webhook_url)
   print(f'Webhook set to {webhook_url}')
 
-  # إبقاء التطبيق قيد التشغيل عبر Flask
-  while True:
-    time.sleep(3600)
+  # تشغيل خادم Flask على المنفذ المطلوب
+  port = int(os.environ.get('PORT', 10000))
+  app.run(host='0.0.0.0', port=port)
