@@ -1,3 +1,4 @@
+import asyncio
 import os
 import time
 from chanify import Chanify
@@ -118,9 +119,10 @@ def handle_download_choice(call):
 
   bot.answer_callback_query(call.id, 'جاري معالجة طلبك...')
 
+  # تشغيل الإعلان بشكل Async محدد لتفادي RuntimeWarning
   if chanify:
     try:
-      chanify.show_ad(chat_id=user_id)
+      asyncio.run(chanify.show_ad(chat_id=user_id))
     except Exception as e:
       print(f'Chanify Error: {e}')
 
