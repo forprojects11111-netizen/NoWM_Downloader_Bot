@@ -15,7 +15,6 @@ except Exception as e:
 
 # --- 2. إعداد المتغيرات ---
 TOKEN = os.environ.get('TOKEN')
-# قراءة رابط Adsterra المباشر من متغير البيئة
 AD_DIRECT_LINK = os.environ.get('AD_DIRECT_LINK', '')
 RENDER_EXTERNAL_URL = os.environ.get(
     'RENDER_EXTERNAL_URL', 'https://nowm-downloader-bot-3-syg0.onrender.com'
@@ -26,9 +25,12 @@ if not TOKEN:
 
 bot = telebot.TeleBot(TOKEN)
 user_urls = {}
+# مجموعة لتتبع المستخدمين المطلوب منهم مشاهدة الإعلان للتحميل القادم
+pending_ad_users = set()
+
 COOKIE_FILE = 'cookies.txt'
 
-# --- 3. إعدادات yt-dlp لتجاوز حظر السيرفرات ---
+# --- 3. إعدادات yt-dlp ---
 BASE_YTDL_OPTS = {
     'quiet': True,
     'no_warnings': True,
@@ -80,10 +82,43 @@ def send_welcome(message):
   )
 
 
+# إلغاء الحظر عند الضغط على زر التفعيل بعد الإعلان
+@bot.callback_query_handler(func=lambda call: call.data == 'unlock_bot')
+def handle_unlock(call):
+  user_id = call.message.chat.id
+  pending_ad_users.discard(user_id)
+  bot.answer_callback_query(
+      call.id, '✅ تم فتح التنزيل! يمكنك الآن إرسال رابط جديد.'
+  )
+  bot.send_message(user_id, '🔓 تم فتح البوت بنجاح! أرسل الرابط الجديد الآن.')
+
+
 @bot.message_handler(func=lambda message: True)
 def handle_message(message):
   user_id = message.chat.id
   url = message.text.strip()
+
+  # فحص ما إذا كان المستخدم مجبراً على زيارة الإعلان أولاً
+  if user_id in pending_ad_users and AD_DIRECT_LINK:
+    markup = InlineKeyboardMarkup()
+    btn_ad = InlineKeyboardButton(
+        '📢 اضغط هنا لزيارة الإعلان والفتح', url=AD_DIRECT_LINK
+    )
+    btn_unlock = InlineKeyboardButton(
+        '🔓 فتح التحميل بعد الزيارة', callback_data='unlock_bot'
+    )
+    markup.add(btn_ad)
+    markup.add(btn_unlock)
+
+    bot.reply_to(
+        message,
+        '⚠️ **عذراً! لاستخدام البوت وتحميل فيديو آخر:**\n\n1️⃣ اضغط على زر'
+        ' الإعلان بالأسفل.\n2️⃣ بعد فتح الإعلان، اضغط على زر "🔓 فتح التحميل'
+        ' بعد الزيارة".',
+        reply_markup=markup,
+        parse_mode='Markdown',
+    )
+    return
 
   if not url.startswith('http'):
     bot.reply_to(message, 'الرجاء إرسال رابط صحيح.')
@@ -156,14 +191,18 @@ def handle_download_choice(call):
           '📤 جاري رفع الملف إلى المحادثة...', user_id, status_msg.message_id
       )
 
-      # تجهيز زر الإعلان إذا كان الرابط موجوداً في Render
+      # إعداد أزرار الإعلان وفتح التحميل القادم
       ad_markup = None
       if AD_DIRECT_LINK:
         ad_markup = InlineKeyboardMarkup()
         ad_btn = InlineKeyboardButton(
-            '🎁 اضغط هنا لدعم البوت / رابط الإعلان', url=AD_DIRECT_LINK
+            '🎁 اضغط هنا لدعم البوت والإعلان', url=AD_DIRECT_LINK
+        )
+        unlock_btn = InlineKeyboardButton(
+            '🔓 فتح التحميل القادم', callback_data='unlock_bot'
         )
         ad_markup.add(ad_btn)
+        ad_markup.add(unlock_btn)
 
       with open(file_path, 'rb') as f:
         if is_audio:
@@ -172,20 +211,31 @@ def handle_download_choice(call):
               f,
               title=title,
               performer='Downloader Bot',
-              caption=f'🎵 **{title}**',
+              caption=(
+                  f'🎵 **{title}**\n\n⚠️ *للتحميل المرة القادمة، يرجى الضغط على'
+                  ' زر الإعلان أسفله ثم الضغط على فتح التحميل القادم.*'
+              ),
               parse_mode='Markdown',
-              reply_markup=ad_markup,  # إرفاق زر الإعلان
+              reply_markup=ad_markup,
           )
         else:
           bot.send_video(
               user_id,
               f,
-              caption=f'🎥 **{title}**',
+              caption=(
+                  f'🎥 **{title}**\n\n⚠️ *للتحميل المرة القادمة، يرجى الضغط على'
+                  ' زر الإعلان أسفله ثم الضغط على فتح التحميل القادم.*'
+              ),
               parse_mode='Markdown',
-              reply_markup=ad_markup,  # إرفاق زر الإعلان
+              reply_markup=ad_markup,
           )
 
       bot.delete_message(user_id, status_msg.message_id)
+
+      # إضافة المستخدم للانتظار المرة القادمة
+      if AD_DIRECT_LINK:
+        pending_ad_users.add(user_id)
+
     else:
       bot.edit_message_text(
           '❌ تعذر استخراج الفيديو، قد يكون الرابط مقيداً أو غير متاح.',
